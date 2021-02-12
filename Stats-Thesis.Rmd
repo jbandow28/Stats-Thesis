@@ -8,6 +8,7 @@ output: html_document
 Libraries necessary for project
 
 ```{r}
+library(Lahman)
 
 ```
 
@@ -15,5 +16,54 @@ Libraries necessary for project
 Import dataset
 
 ```{r}
+batting <- read.csv("Batting.csv")
 
 ```
+
+
+Compile seasonal stats to career dataset
+
+```{r}
+emp <- rep(NA, length(unique(batting$playerID)))
+sum_vec <- function(vec) {
+  data <- na.omit(vec)
+  if (length(data) == 0) return(NA)
+  else return(sum(data))
+}
+
+replace_na <- function(vec, rep) {
+  res <- vec
+  for (i in 1:length(vec)) {
+    if (is.na(res[i])) res[i] <- rep
+  }
+  return(res)
+}
+
+# Batting
+
+batting_career <- data.frame(playerID = unique(batting$playerID), firstyearID = emp, lastyearID = emp, G = emp, AB = emp, R = emp, H = emp, X2B = emp, X3B = emp, HR = emp, RBI = emp, SB = emp, CS = emp, BB = emp, SO = emp, IBB = emp, HBP = emp, SH = emp, SF = emp, GIDP = emp)
+
+for (i in batting_career$playerID) {
+  seasonal <- batting[batting$playerID == i,]
+  batting_career[batting_career$playerID == i,-1] <- c(sort(seasonal$yearID)[1], tail(sort(seasonal$yearID), n=1), sum_vec(seasonal$G), sum_vec(seasonal$AB), sum_vec(seasonal$R), sum_vec(seasonal$H), sum_vec(seasonal$X2B), sum_vec(seasonal$X3B), sum_vec(seasonal$HR), sum_vec(seasonal$RBI), sum_vec(seasonal$SB), sum_vec(seasonal$CS), sum_vec(seasonal$BB), sum_vec(seasonal$SO), sum_vec(seasonal$IBB), sum_vec(seasonal$HBP), sum_vec(seasonal$SH), sum_vec(seasonal$SF), sum_vec(seasonal$GIDP))
+}
+
+
+```
+
+
+Compute other statistics
+
+```{r}
+# Batting
+
+batting_career$AVG <- batting_career$H / batting_career$AB
+batting_career$X1B <- batting_career$H - batting_career$X2B - batting_career$X3B - batting_career$HR
+batting_career$SLG <- (batting_career$X1B + 2*batting_career$X2B + 3*batting_career$X3B + 4*batting_career$HR) / batting_career$AB
+batting_career$PA <- batting_career$AB + batting_career$BB + replace_na(batting_career$HBP, 0) + replace_na(batting_career$SF, 0) + replace_na(batting_career$SH, 0) 
+batting_career$OBP <- (batting_career$H + batting_career$BB + replace_na(batting_career$HBP, 0)) / (batting_career$PA - replace_na(batting_career$SH, 0))
+batting_career$OPS <- batting_career$OBP + batting_career$SLG
+batting_career$SBP <- batting_career$SB / (batting_career$SB + batting_career$CS)
+
+```
+
