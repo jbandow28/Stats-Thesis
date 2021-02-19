@@ -1,5 +1,10 @@
 # Timeline 
 
+Deliverables for 2/19:
+* Work on pre analysis sections of paper
+* Clean pitching/fielding stats and calculate non-count statistics
+* Scrape WAR off Baseball-Reference/Fangraphs
+
 Deliverables for 2/12:
 * Add references to and submit proposal
 * Write a few pages of background
