@@ -9,22 +9,24 @@ Libraries necessary for project
 
 ```{r}
 library(Lahman)
-
+library(rvest)
+library(dplyr)
+library(readr)
 ```
 
 
 Import dataset
 
 ```{r}
-batting <- read.csv("Batting.csv")
-
+data("Master")
+data("Batting")
+data("Pitching")
 ```
 
 
 Compile seasonal stats to career dataset
 
 ```{r}
-emp <- rep(NA, length(unique(batting$playerID)))
 sum_vec <- function(vec) {
   data <- na.omit(vec)
   if (length(data) == 0) return(NA)
@@ -40,16 +42,126 @@ replace_na <- function(vec, rep) {
 }
 
 # Batting
+emp <- rep(NA, length(unique(Batting$playerID)))
 
-batting_career <- data.frame(playerID = unique(batting$playerID), firstyearID = emp, lastyearID = emp, G = emp, AB = emp, R = emp, H = emp, X2B = emp, X3B = emp, HR = emp, RBI = emp, SB = emp, CS = emp, BB = emp, SO = emp, IBB = emp, HBP = emp, SH = emp, SF = emp, GIDP = emp)
+batting_career <- data.frame(playerID = unique(Batting$playerID), firstyearID = emp, lastyearID = emp, G = emp, AB = emp, R = emp, H = emp, X2B = emp, X3B = emp, HR = emp, RBI = emp, SB = emp, CS = emp, BB = emp, SO = emp, IBB = emp, HBP = emp, SH = emp, SF = emp, GIDP = emp)
 
 for (i in batting_career$playerID) {
-  seasonal <- batting[batting$playerID == i,]
+  seasonal <- Batting[Batting$playerID == i,]
   batting_career[batting_career$playerID == i,-1] <- c(sort(seasonal$yearID)[1], tail(sort(seasonal$yearID), n=1), sum_vec(seasonal$G), sum_vec(seasonal$AB), sum_vec(seasonal$R), sum_vec(seasonal$H), sum_vec(seasonal$X2B), sum_vec(seasonal$X3B), sum_vec(seasonal$HR), sum_vec(seasonal$RBI), sum_vec(seasonal$SB), sum_vec(seasonal$CS), sum_vec(seasonal$BB), sum_vec(seasonal$SO), sum_vec(seasonal$IBB), sum_vec(seasonal$HBP), sum_vec(seasonal$SH), sum_vec(seasonal$SF), sum_vec(seasonal$GIDP))
 }
 
+emp <- rep(NA, length(unique(Pitching$playerID)))
 
+pitching_career <- data.frame(playerID = unique(Pitching$playerID), firstyearID = emp, lastyearID = emp, W = emp, L = emp, G = emp, GS = emp, CG = emp, SHO = emp, SV = emp, IPout = emp, H = emp, ER = emp, HR = emp, BB = emp, SO = emp, BAOpp = emp, ERA = emp, IBB = emp, WP = emp, HBP = emp, BK = emp, BFP = emp, GF = emp, R = emp, SH = emp, SF = emp, GIDP = emp)
+
+for (i in pitching_career$playerID) {
+  seasonal <- Pitching[Pitching$playerID == i,]
+  pitching_career[pitching_career$playerID == i,-1] <- c(sort(seasonal$yearID)[1], tail(sort(seasonal$yearID), n=1), sum_vec(seasonal$W), sum_vec(seasonal$L), sum_vec(seasonal$G), sum_vec(seasonal$GS), sum_vec(seasonal$CG), sum_vec(seasonal$SHO), sum_vec(seasonal$SV), sum_vec(seasonal$IPout), sum_vec(seasonal$H), sum_vec(seasonal$ER), sum_vec(seasonal$HR), sum_vec(seasonal$BB), sum_vec(seasonal$SO), NA, NA, sum_vec(seasonal$IBB), sum_vec(seasonal$WP), sum_vec(seasonal$HBP), sum_vec(seasonal$BK), sum_vec(seasonal$BFP), sum_vec(seasonal$GF), sum_vec(seasonal$R), sum_vec(seasonal$SH), sum_vec(seasonal$SF), sum_vec(seasonal$GIDP))
+}
 ```
+
+
+Attaching WAR
+
+```{r}
+pitch <- left_join(pitching_career %>% select(c("W", "G", "L", "playerID")), Master %>% select(c("playerID", "nameFirst", "nameLast")), by = "playerID")
+pitch$Name <- paste(pitch$nameFirst, pitch$nameLast, sep = " ")
+fan_pitch <- read.csv("FanGraphs Leaderboard (1)pitching.csv")[,c("Name", "W", "G", "L", "playerid", "WAR")]
+fan_pitch <- fan_pitch %>% extract(Name, c("nameFirst", "nameLast"), "([^ ]+) (.*)")
+
+test <- merge(fan_pitch, pitch, by = c("nameFirst", "nameLast", "L"))
+fan_pitch <- left_join(fan_pitch, test[,c("nameFirst", "nameLast", "L", "playerID")], by = c("nameFirst", "nameLast", "L"))
+
+fan_pitch_short <- fan_pitch %>% filter(is.na(playerID)) %>% select(c("nameFirst", "nameLast", "W", "G", "L", "playerid", "WAR"))
+test <- merge(fan_pitch_short, pitch, by = c("nameFirst", "nameLast", "W"))
+fan_pitch_short <- left_join(fan_pitch_short, test[,c("nameFirst", "nameLast", "W", "playerID")], by = c("nameFirst", "nameLast", "W"))
+fan_pitch <- left_join(fan_pitch, fan_pitch_short[,c("playerID", "playerid")], by = "playerid")
+
+# test <- merge(fan_pitch, pitch, by = c("nameFirst", "nameLast", "W"))
+# fan_pitch <- left_join(fan_pitch, test[,c("nameFirst", "nameLast", "W", "playerID")], by = c("nameFirst", "nameLast", "W"))
+
+fan_pitch$playerID <- ifelse(is.na(fan_pitch$playerID.x) & is.na(fan_pitch$playerID.y), NA, ifelse(is.na(fan_pitch$playerID.x), fan_pitch$playerID.y, fan_pitch$playerID.x))
+
+fan_pitch_short <- fan_pitch %>% filter(is.na(playerID)) %>% select(c("nameFirst", "nameLast", "W", "G", "L", "playerid", "WAR"))
+test <- merge(fan_pitch_short, pitch, by = c("nameFirst", "nameLast"))
+fan_pitch_short <- left_join(fan_pitch_short, test[,c("nameFirst", "nameLast", "playerID")], by = c("nameFirst", "nameLast"))
+fan_pitch <- left_join(fan_pitch, fan_pitch_short[,c("playerID", "playerid")], by = "playerid")
+fan_pitch$playerID <- ifelse(is.na(fan_pitch$playerID.x.x) & is.na(fan_pitch$playerID.y.y), NA, ifelse(is.na(fan_pitch$playerID.x.x), fan_pitch$playerID.y.y, fan_pitch$playerID.x.x))
+
+fan_pitch$playerID[3070] <- "begleed01"
+
+
+
+
+Master <- Master %>% select(c("playerID", "nameFirst", "nameLast"))
+Master <- merge(Master, batting_career[,c("HR", "R", "SB", "playerID")], by = "playerID", all = TRUE)
+Master <- merge(Master, pitching_career[,c("W", "G", "ER", "playerID")], by = "playerID", all = TRUE)
+Master$Name <- paste(Master$nameFirst, Master$nameLast, sep = " ")
+
+fangraphs <- merge(read.csv("FanGraphs Leaderboard (1).csv")[,c("Name", "HR", "R", "SB", "playerid")], read.csv("FanGraphs Leaderboard (1)pitching.csv")[,c("Name", "W", "G", "L", "playerid")], by = "playerid", all = TRUE)
+fangraphs$Name <- ifelse(is.na(fangraphs$Name.x), fangraphs$Name.y, fangraphs$Name.x)
+fangraphs <- fangraphs %>% extract(Name, c("nameFirst", "nameLast"), "([^ ]+) (.*)")
+
+test <- merge(fangraphs, Master, by = c("nameLast", "HR", "W"))
+fangraphs <- left_join(fangraphs, test[,c("nameLast", "HR", "W", "playerID")], by = c("nameLast", "HR", "W"))
+
+test2 <- merge(fangraphs, Master, by = c("nameLast", "W"))
+fangraphs <- left_join(fangraphs, test[,c("nameLast", "W", "playerID")], by = c("nameLast", "W"))
+
+
+fangraphs$fWAR <- ifelse(is.na(fangraphs$WAR.x) & is.na(fangraphs$WAR.y), NA, ifelse(is.na(fangraphs$WAR.x), 0, fangraphs$WAR.x) + ifelse(is.na(fangraphs$WAR.y), 0, fangraphs$WAR.y))
+fangraphs$playerID <- paste0(tolower(substr(fangraphs$nameLast, 1, 5)), tolower(substr(fangraphs$nameFirst, 1, 2)), "01")
+
+Master$Name <- paste(Master$nameFirst, Master$nameLast, sep = " ")
+Master_odd <- merge(fangraphs, Master[!Master$correct_ID,], by = "Name")
+data
+
+
+Master$playerID2 <- paste0(tolower(substr(Master$nameLast, 1, 5)), tolower(substr(Master$nameFirst, 1, 2)), "01")
+
+Master$correct_ID <- Master$playerID == Master$playerID2
+
+
+
+
+# Baseball Reference WAR
+
+Master$rWAR <- NA
+Master$finalGame <- as.Date(Master$finalGame)
+get_WAR <- function(row) {
+  if (!is.na(row["bbrefID"]) & !is.na(row["finalGame"])) {
+    page <- read_html(paste0("https://www.baseball-reference.com/players/", substr(row["bbrefID"], 1, 1), "/", row["bbrefID"], ".shtml"))
+    modern_res <- page %>% html_nodes(".p1 div:nth-child(1) p+ p") %>% html_text()
+    if (length(modern_res) > 0) return(as.numeric(modern_res))
+    return(as.numeric(page %>% html_nodes(".p1 div:nth-child(1) p") %>% html_text()))
+  }
+  return(NA)
+}
+
+t <- 0
+for (i in 16952:dim(Master)[1]) {
+  t <- t + 1/dim(Master)[1]
+  print(t)
+  Master$WAR[i] <- get_WAR(Master[i,])
+}
+```
+
+
+Clean WAR Data
+
+```{r}
+career_war$X1 <- as.numeric(career_war$X1)
+career_war$X3 <- as.numeric(career_war$X3)
+colnames(career_war) <- c("Rank", "Player (yrs, age)", "WAR", "Bats/Throws")
+
+
+https://stathead.com/baseball/season_finder.cgi?request=1&sum=1&order_by_asc=0&order_by=WAR_bat&qualifiersSeason=nomin&minpasValS=502&mingamesValS=100&qualifiersCareer=nomin&minpasValC=3000&mingamesValC=1000&min_year_season=1871&max_year_season=2020&lg_ID=lgAny&lgAL_team=tmAny&lgNL_team=tmAny&lgFL_team=tmAny&lgAA_team=tmAny&lgPL_team=tmAny&lgUA_team=tmAny&lgNA_team=tmAny&exactness=anypos&pos_1=1&pos_2=1&pos_3=1&pos_4=1&pos_5=1&pos_6=1&pos_7=1&pos_8=1&pos_9=1&pos_10=1&pos_11=1&games_prop=&games_tot=&as=result_batter&offset=1800&type=b&cval=&cstat=&cratiostat=&bats=any&throws=any&min_age=0&max_age=99&min_season=1&max_season=-1&location=pob&locationMatch=is&pob=&pod=&pcanada=&pusa=&is_rookie=&isHOF=either&isAllstar=either&isActive=either
+
+
+https://stathead.com/baseball/season_finder.cgi?request=1&sum=1&order_by_asc=0&order_by=WAR_bat&qualifiersSeason=nomin&minpasValS=502&mingamesValS=100&qualifiersCareer=nomin&minpasValC=3000&mingamesValC=1000&min_year_season=1871&max_year_season=2020&lg_ID=lgAny&lgAL_team=tmAny&lgNL_team=tmAny&lgFL_team=tmAny&lgAA_team=tmAny&lgPL_team=tmAny&lgUA_team=tmAny&lgNA_team=tmAny&exactness=anypos&pos_1=1&pos_2=1&pos_3=1&pos_4=1&pos_5=1&pos_6=1&pos_7=1&pos_8=1&pos_9=1&pos_10=1&pos_11=1&games_prop=&games_tot=&as=result_batter&offset=200&type=b&cval=&cstat=&cratiostat=&bats=any&throws=any&min_age=0&max_age=99&min_season=1&max_season=-1&location=pob&locationMatch=is&pob=&pod=&pcanada=&pusa=&is_rookie=&isHOF=either&isAllstar=either&isActive=either
+```
+
 
 
 Compute other statistics
