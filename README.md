@@ -1,5 +1,10 @@
 # Timeline 
 
+Deliverables for 2/26:
+* Organize/comment code
+* Finish merging Baseball Reference/FanGraphs data
+* Make linear regression for WAR on Hall of Fame votes
+
 Deliverables for 2/19:
 * Work on pre analysis sections of paper
 * Clean pitching/fielding stats and calculate non-count statistics
