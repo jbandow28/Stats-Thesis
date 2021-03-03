@@ -1,5 +1,9 @@
 # Timeline 
 
+Deliverables for 3/5:
+* Finish filling in gaps for fansgraphs WAR
+* Improve model, incorporate more than just WAR
+
 Deliverables for 2/26:
 * Organize/comment code
 * Finish merging Baseball Reference/FanGraphs data
