@@ -14,12 +14,14 @@ library(dplyr)
 library(readr)
 library(httr)
 library(data.table)
+library(ggplot2)
+library(plotly)
 ```
 
 
 Import dataset
 
-```{r}
+```{r, include=FALSE}
 data("Master")
 data("Batting")
 data("Pitching")
@@ -28,7 +30,7 @@ data("HallOfFame")
 
 Compile seasonal stats to career dataset
 
-```{r}
+```{r, include=FALSE}
 sum_vec <- function(vec) {
   data <- na.omit(vec)
   if (length(data) == 0) return(NA)
@@ -67,27 +69,26 @@ for (i in pitching_career$playerID) {
 
 Attaching WAR
 
-```{r}
+```{r, include=FALSE}
+# Find duplicate indices of df sorted by given col
+find_dup_indices <- function(col) {
+  data <- sort(col) 
+  res <- NULL
+  for (i in 1:length(data)) {
+    if (data[i] == data[((i-2) %% length(data)) + 1] | data[i] == data[(i %% length(data)) + 1]) {
+      res <- append(res, i)
+    }
+  }
+  return(res)
+}
+
+
 # FanGraphs WAR
 
 fan_pitch <- read.csv("FanGraphs Leaderboard (1)pitching.csv")[,c("playerid", "WAR")]
 colnames(fan_pitch) <- c("fangraphsID", "fWAR_pitch")
 fan_bat <- read.csv("FanGraphs Leaderboard (1).csv")[,c("playerid", "WAR")]
 colnames(fan_bat) <- c("fangraphsID", "fWAR_bat")
-
-# # Find duplicate names
-# Master$Name <- paste(Master$nameFirst, Master$nameLast, sep = " ")
-# names <- sort(Master$Name)
-# dup <- NULL
-# for (i in 1:length(names)) {
-#   if (names[((i-1) %% length(names)) + 1] == names[((i-2) %% length(names)) + 1] | names[((i-1) %% length(names)) + 1] == names[(i %% length(names)) + 1]) {
-#     dup <- append(dup, TRUE)
-#   }
-#   else {
-#     dup <- append(dup, FALSE)
-#   }
-# }
-# Master[order(Master$Name), "duplicate"] <- dup
 
 
 fangraphs <- data.frame()
@@ -106,7 +107,7 @@ while(working) {
   i <- i + 1
 }
 colnames(fangraphs) <- c("fangraphsID", "Name", "DOB")
-fangraphs$DOB
+
 fangraphs$birthMonth <- as.integer(gsub("/.*$?", "", fangraphs$DOB))
 fangraphs$birthDay <- as.integer(gsub("/.*$?", "", gsub("^[0-9]*/?", "", fangraphs$DOB)))
 fangraphs$birthYear <- as.integer(substr(gsub("^[0-9]*/?", "", gsub("^[0-9]*/?", "", fangraphs$DOB)), 1, 4))
@@ -116,7 +117,66 @@ fangraphs$fangraphsID <- as.integer(fangraphs$fangraphsID)
 fangraphs <- fangraphs %>% dplyr::select(c("fangraphsID", "Name", "birthDate"))
 fwrite(fangraphs, "fangraphsID.csv")
 
-Master2 <- left_join(Master, fangraphs, by = c("Name", "birthDate"))
+fangraphs <- fread("fangraphsID.csv")
+
+Master$Name <- paste(Master$nameFirst, Master$nameLast, sep = " ")
+Master2 <- Master
+Master2 <- left_join(Master2, fangraphs, by = c("Name", "birthDate"))
+Master2 <- Master2[order(Master2$fangraphsID),]
+Master2[16945,]$fangraphsID <- NA
+Master2 <- Master2[-c(15581, 15582, 15641, 15642, 16258, 16259),]
+Master2 <- Master2[order(Master2$playerID),]
+Master2 <- Master2[-c(12498, 12755),]
+
+leftover_fangraphs <- fangraphs[!(fangraphs$fangraphsID %in% Master2$fangraphsID),]
+leftover_Master2 <- Master2[is.na(Master2$fangraphsID),]
+
+leftover_fangraphs$Name <- gsub("~", "", gsub("'", "", iconv(gsub("Jr.", "", gsub("[^[:alnum:] [:punct:]]", "", leftover_fangraphs$Name)), from = "UTF-8", to = "ASCII//TRANSLIT")))
+leftover_Master2$Name <- gsub("'", "", leftover_Master2$Name)
+# leftover_fangraphs$nameFirst <- gsub(" .*$", "", leftover_fangraphs$Name)
+# leftover_fangraphs$nameLast <- gsub(" .*$", "", gsub("^\\S* ", "", leftover_fangraphs$Name))
+leftover_Master2_t <- left_join(leftover_Master2, leftover_fangraphs, by = c("Name", "birthDate"))
+leftover_Master2_t$fangraphsID <- leftover_Master2_t$fangraphsID.y
+
+dictionary <- Master2 %>% dplyr::select(playerID, bbrefID, fangraphsID)
+dictionary <- dictionary[!is.na(dictionary$fangraphsID),]
+dictionary <- rbind(dictionary, leftover_Master2_t[!is.na(leftover_Master2_t$fangraphsID), c("playerID", "bbrefID", "fangraphsID")])
+fwrite(dictionary, "dictionary.csv")
+
+leftover_fangraphs <- leftover_fangraphs[!(leftover_fangraphs$fangraphsID %in% leftover_Master2_t$fangraphsID),]
+leftover_Master2 <- leftover_Master2_t[is.na(leftover_Master2_t$fangraphsID),]
+
+leftover_fangraphs$Name <- gsub(" ", "", leftover_fangraphs$Name)
+leftover_Master2$Name <- gsub(" ", "", leftover_Master2$Name)
+leftover_Master2_t <- left_join(leftover_Master2, leftover_fangraphs, by = c("Name", "birthDate"))
+leftover_Master2_t$fangraphsID <- leftover_Master2_t$fangraphsID.y.y
+dictionary <- rbind(dictionary, leftover_Master2_t[!is.na(leftover_Master2_t$fangraphsID), c("playerID", "bbrefID", "fangraphsID")])
+fwrite(dictionary, "dictionary.csv")
+
+leftover_fangraphs <- leftover_fangraphs[!(leftover_fangraphs$fangraphsID %in% leftover_Master2_t$fangraphsID),]
+leftover_Master2 <- leftover_Master2[!(leftover_Master2$playerID %in% dictionary$playerID),]
+
+leftover_Master2$Name <- gsub("[[:punct:]]", "", leftover_Master2$Name)
+leftover_Master2_t <- leftover_Master2_t[order(leftover_Master2_t$Name), ]
+leftover_Master2_t[1,"fangraphsID.y"] <- 1006417
+leftover_Master2_t[2,"fangraphsID.y"] <- 1420
+leftover_Master2_t[3,"fangraphsID.y"] <- 531
+
+leftover_Master2_t <- left_join(leftover_Master2, leftover_fangraphs, by = c("birthDate"))
+
+temp_adds <- leftover_Master2_t[!is.na(leftover_Master2_t$fangraphsID.y),]
+fwrite(temp_adds, "temp_odds.csv")
+temp_adds <- temp_adds[-c(1,3,16:260,262:947,949:1414,1418:1883, 1886, 1888:2120, 2124:2144, 2146:2356,2360:2826,2829:3294, 3296:3331, 3333:3528,3533:3766,3768:3805,3807:4000,4003:4043,4045:4235,4237:4278,4280:4469,4471,4475,4478,4484,4521:4753,4757:4811,4813:4989,4991:5223, 5231:5463,5472:5704,5707:5781,5783:5941,5944:6409,6411:6725,6727:7110,7114:7346,7355:7587,7592:7682,7684:8057,8059,8061:8293,8297:8995, 8997:9462,9465:9697,9704:9804,9806:9936,9938,9940:10405,10407:10639,10641,10643:11108,11123,11140:11838,11841:12192,12194:12306,12310:12542, 12546:12668,12670:12778,12784:12913,12915:13016,13021:14095,14097:14419,14424:14657,14660:14815,14817:14892,14895:15127,15136, 15139:15371,15374:15606,15608:15840,15848:16015,16017:16081,16083,16086:16784,16787,16791:16964,16966:17023,17029:17261,17275:17507, 17513:17745,17748:18213,18216:18448,18450:18639,18641:18682,18685:19383,19388:19620,19623:19855,19858,19862:20094,20096:20761, 20763:20794,20797:20999,21001:21702,21704:21961,21963,21966:22176,22178:22198,22201,22204:22436,22438,22440:22672,22691:22907, 22909:22923,22926,22936:23154,23156:23168,23174:23395,23397:23406,23408,23411,23413,23417:23882,23884:24116,24119:24351),]
+temp_adds$fangraphsID <- temp_adds$fangraphsID.y
+dictionary <- rbind(dictionary, temp_adds[,c("playerID", "bbrefID", "fangraphsID")])
+fwrite(dictionary, "dictionary.csv")
+
+
+leftover_Master2 <- leftover_Master2[!(leftover_Master2$playerID %in% dictionary$playerID),]
+leftover_fangraphs <- leftover_fangraphs[!(leftover_fangraphs$fangraphsID %in% dictionary$fangraphsID),]
+
+
+
 Master2 <- left_join(Master2, fan_pitch, by = "fangraphsID")
 Master2 <- left_join(Master2, fan_bat, by = "fangraphsID")
 Master2$fWAR <- ifelse(is.na(Master2$fWAR_bat) & is.na(Master2$fWAR_pitch), NA, ifelse(is.na(Master2$fWAR_bat), 0, Master2$fWAR_bat) + ifelse(is.na(Master2$fWAR_pitch), 0, Master2$fWAR_pitch))
@@ -125,30 +185,65 @@ Master2$fWAR <- ifelse(is.na(Master2$fWAR_bat) & is.na(Master2$fWAR_pitch), NA, 
 
 # Baseball Reference WAR
 
-Master2$rWAR <- NA
-Master2$finalGame <- as.Date(Master2$finalGame)
+rWAR <- data.frame(playerID = Master$playerID, bbrefID = Master$bbrefID, finalGame = Master$finalGame, rWAR = NA, rWAR_batting = NA, rWAR_pitching = NA)
+rWAR[7443,"bbrefID"] <- "harribe01"
+rWAR <- rWAR[-5905,]
+
 get_rWAR <- function(row) {
   if (!is.na(row["bbrefID"]) & !is.na(row["finalGame"])) {
     page <- read_html(paste0("https://www.baseball-reference.com/players/", substr(row["bbrefID"], 1, 1), "/", row["bbrefID"], ".shtml"))
-    modern_res <- page %>% html_nodes(".p1 div:nth-child(1) p+ p") %>% html_text()
-    if (length(modern_res) > 0) return(as.numeric(modern_res))
-    return(as.numeric(page %>% html_nodes(".p1 div:nth-child(1) p") %>% html_text()))
+    total <- page %>% html_nodes(".p1 div:nth-child(1) p+ p") %>% html_text() %>% as.numeric()
+    if (length(total) == 0) total <- page %>% html_nodes(".p1 div:nth-child(1) p") %>% html_text() %>% as.numeric()
+    new_page <- page %>% html_nodes(xpath = '//comment()') %>% html_text() %>% paste(collapse = '') %>% read_html()
+    batting <- new_page %>% html_nodes("#batting_value tfoot tr:nth-child(1) .right:nth-child(14)") %>% html_text() %>% as.numeric()
+    if (length(batting) == 0) batting <- NA
+    pitching <- new_page %>% html_nodes("#pitching_value tfoot tr:nth-child(1) .right:nth-child(17)") %>% html_text() %>% as.numeric()
+    if (length(pitching) == 0) pitching <- NA
+    return(c(total, batting, pitching))
   }
   return(NA)
 }
 
-t <- 0
-for (i in 9451:dim(Master2)[1]) {
-  t <- t + 1/dim(Master2)[1]
-  print(t)
-  Master2$rWAR[i] <- get_rWAR(Master2[i,])
+get_rWAR2 <- function(row) {
+  page <- read_html(paste0("https://www.baseball-reference.com/players/", substr(row["bbrefID"], 1, 1), "/", row["bbrefID"], ".shtml"))
+  total <- page %>% html_nodes(".p1 div:nth-child(1) p+ p") %>% html_text() %>% as.numeric()
+  if (length(total) == 0) total <- page %>% html_nodes(".p1 div:nth-child(1) p") %>% html_text() %>% as.numeric()
+  new_page <- page %>% html_nodes(xpath = '//comment()') %>% html_text() %>% paste(collapse = '') %>% read_html()
+  batting <- new_page %>% html_nodes("#batting_value tfoot tr:nth-child(1) .right:nth-child(14)") %>% html_text() %>% as.numeric()
+  if (length(batting) == 0) batting <- NA
+  pitching <- new_page %>% html_nodes("#pitching_value tfoot tr:nth-child(1) .right:nth-child(17)") %>% html_text() %>% as.numeric()
+  if (length(pitching) == 0) pitching <- NA
+  else {
+    pitching2 <- new_page %>% html_nodes("#pitching_value tfoot tr:nth-child(1) .right:nth-child(18)") %>% html_text() %>% as.numeric()
+    pitch_approx <- total - ifelse(is.na(batting),0,batting)
+    if (abs(pitch_approx - pitching) > abs(pitch_approx - pitching2)) {
+      pitching <- pitching2
+    }
+  }
+  return(c(total, batting, pitching))
 }
+
+t <- 0
+for (i in 9449:dim(rWAR)[1]) {
+  t <- t + 1/dim(rWAR)[1]
+  print(t)
+  rWAR[i,c("rWAR", "rWAR_batting", "rWAR_pitching")] <- get_rWAR(rWAR[i,])
+}
+rWAR <- rWAR[-9449,]
+rWAR$bbrefCode <- str_sub(rWAR$bbrefID, -2, -1) %>% as.numeric()
+rWAR <- rWAR[rWAR$bbrefCode != 99,]
+for (i in 1:dim(rWAR[is.na(rWAR$rWAR),])[1]) {
+  rWAR[is.na(rWAR$rWAR),][i,c("rWAR", "rWAR_batting", "rWAR_pitching")] <- get_rWAR2(rWAR[is.na(rWAR$rWAR),][i,])
+}
+rWAR <- rWAR %>% select(playerID, bbrefID, rWAR, rWAR_batting, rWAR_pitching)
+fwrite(rWAR, "rWAR.csv")
 ```
 
 
 Plots 
 
-```{r}
+```{r, include=FALSE}
+
 Master2_plots <- Master2 %>% dplyr::select("playerID", "fangraphsID", "bbrefID", "Name", "fWAR", "rWAR")
 Master2_plots <- Master2_plots[complete.cases(Master2_plots),]
 plot(x = Master2_plots$rWAR, y = Master2_plots$fWAR, pch = 16, main = "Baseball-Reference vs. FanGraphs WAR", xlab = "Baseball-Reference WAR", ylab = "FanGraphs WAR")
@@ -159,27 +254,52 @@ summary(lm(Master2_plots$rWAR ~ Master2_plots$fWAR))
 Hall of Fame Data
 
 ```{r}
-HallOfFame$percentVote <- HallOfFame$votes / HallOfFame$ballots
-reg1_data <- data.frame()
-for (i in unique(HallOfFame$playerID)) {
-  temp <- HallOfFame %>% dplyr::filter(playerID == i)
-  reg1_data <- rbind(reg1_data, c(i, max(na.omit(temp$percentVote))))
+HallOfFame2 <- HallOfFame %>% filter(category == "Player")
+All_stats <- merge(HallOfFame2[HallOfFame2$inducted == 'Y', c("playerID", "inducted", "votedBy")], rWAR, by = "playerID", all = TRUE)
+All_stats[is.na(All_stats$inducted),"inducted"] <- 'N'
+All_stats <- left_join(All_stats, Master[,c("playerID", "nameFirst", "nameLast", "finalGame")], by = "playerID")
+All_stats <- All_stats %>% filter(finalGame < as.Date("2004-01-01"))
+All_stats <- All_stats %>% filter(!(playerID %in% c("brownwi02", "irvinmo01", "paigesa01")))
+All_stats$inducted <- ifelse(All_stats$inducted == 'Y', TRUE, FALSE)
+fig1 <- ggplot(All_stats, aes(inducted, rWAR, color = votedBy, text = paste(nameFirst, nameLast, sep = " "))) + geom_point() + theme_bw() + labs(title = "rWAR vs. Method of Induction", x = "Induction Status", y = "rWAR")
+ggsave("fig1.pdf", fig1)
+res1 <- summary(lm(inducted ~ rWAR, All_stats))
+
+
+HOF_BBWAA <- HallOfFame %>% filter(votedBy == "BBWAA")
+HOF_BBWAA$percentVote <- HOF_BBWAA$votes / HOF_BBWAA$ballots
+HOF_BBWAA_collapsed <- data.frame()
+for (i in unique(HOF_BBWAA$playerID)) {
+  temp <- HOF_BBWAA %>% filter(playerID == i)
+  res <- c(i, max(temp$yearID), max(temp$yearID) - min(temp$yearID) + 1, ifelse('Y' %in% temp$inducted, 'Y', 'N'), max(temp$percentVote))
+  HOF_BBWAA_collapsed <- rbind(HOF_BBWAA_collapsed, res)
 }
-colnames(reg1_data) <- c("playerID", "percentVote")
-reg1_data <- merge(reg1_data, Master2_plots, by = "playerID")
-reg1_data <- reg1_data[complete.cases(reg1_data), ]
-reg1_data$percentVote <- as.numeric(reg1_data$percentVote)
-reg1_data <- reg1_data %>% dplyr::filter(reg1_data$percentVote != -Inf)
-summary(lm(reg1_data$percentVote ~ reg1_data$fWAR))
-summary(lm(reg1_data$percentVote ~ reg1_data$rWAR))
-plot(reg1_data$percentVote, reg1_data$fWAR)
-library(ggplot2)
-library(plotly)
-g <- ggplot(data = reg1_data, aes(x = rWAR, y = percentVote, text = Name)) + geom_point() + theme_bw()
-ggplotly(g)
-Master2_plots %>% dplyr::filter(rWAR >= 50) %>% ggplot(aes(x = rWAR)) + geom_histogram() + theme_bw()
-Master2_plots %>% dplyr::filter(rWAR >= 50) %>% ggplot(aes(x = rWAR))
-ggplotly(g2)
+colnames(HOF_BBWAA_collapsed) <- c("playerID", "finalYear", "totalYears", "BBWAAInducted", "maxPercentVote")
+
+All_stats <- left_join(All_stats, HOF_BBWAA_collapsed, by = "playerID")
+All_stats$onBallet <- !is.na(All_stats$BBWAAInducted)
+All_stats[is.na(All_stats$maxPercentVote),]$maxPercentVote <- 0
+All_stats$maxPercentVote <- All_stats$maxPercentVote %>% as.numeric
+
+fig2 <- ggplot(All_stats, aes(maxPercentVote, rWAR, color = BBWAAInducted)) + geom_point() + theme_bw() + labs(title = "Percent Vote vs. rWAR by BBWAA Results", x = "Maximum Percent Vote", y = "rWAR")
+ggsave("fig2.pdf", fig2)
+fig3 <- ggplot(All_stats, aes(maxPercentVote, rWAR, color = votedBy, text = paste(nameFirst, nameLast, sep = " "))) + geom_point() + theme_bw() + labs(title = "Percent Vote vs. rWAR by Method of Induction", x = "Maximum Percent Vote", y = "rWAR")
+ggsave("fig3.pdf", fig3)
+```
+
+
+Combine Batting/Pitching w/ HOF data
+
+```{r}
+All_stats <- left_join(All_stats, batting_career, by = "playerID")
+All_stats <- left_join(All_stats, pitching_career, by = "playerID")
+pitchers <- All_stats %>% filter(!is.na(G.y)) %>% filter(IPout > 0) %>% filter(GS > 5)
+pitchers$ERA <- pitchers$ER / (pitchers$IPout / 27) 
+pitchers$inducted <- as.numeric(pitchers$inducted * 1)
+mod2 <- lm(inducted ~ W + ERA + SO.y + IPout, pitchers)
+summary(mod2)
+mod3 <- lm(inducted ~ W + ERA + SO.y, pitchers)
+summary(mod3)
 ```
 
 
