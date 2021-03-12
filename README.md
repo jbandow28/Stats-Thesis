@@ -1,5 +1,11 @@
 # Timeline 
 
+Deliverables for 3/19:
+* Add ROC curves to analysis
+* Explore position splits in regression/add in position-specific statistics
+* Explore era splits in regression (Deadball, Steriod, etc.)
+* Look into/try to replicate other models in literature
+
 Deliverables for 3/12:
 * Create new R-Markdown doc to separate scraping/cleaning code from analysis presentation
 * Look into logistic modeling for induction regressions
