@@ -1,0 +1,112 @@
+---
+title: "Stats-Thesis2.Rmd"
+author: "Jackson Bandow"
+date: "3/9/2021"
+output: html_document
+---
+
+```{r Libraries}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(data.table)
+library(Lahman)
+library(stringr)
+```
+
+```{r Import data}
+baseball <- fread("baseball.csv")
+```
+
+```{r Edit data}
+baseball[baseball$votedBy == "", "votedBy"] <- "Not Inducted"
+baseball$votedBy2 <- baseball$votedBy
+baseball[baseball$votedBy2 == "Old Timers", "votedBy2"] <- "Veterans"
+baseball[baseball$votedBy2 == "Run Off", "votedBy2"] <- "BBWAA"
+baseball[baseball$votedBy2 == "Special Election", "votedBy2"] <- "BBWAA"
+baseball$preHOFEra <- baseball$finalGame < as.Date("1922-01-01")
+#Create a training and testing set
+bb_train <- baseball %>% filter(finalGame < as.Date("1991-01-01"))
+bb_test <- baseball %>% filter(finalGame > as.Date("1991-01-01"))
+```
+
+I've used the era from 1871 through 1990 as my training dataset because it is approximately 80% of the data avaliable. Also, I avoid most players that are still in consideration for the Hall of Fame, so I am unlikely to falsely assume that they won't be inducted becuase they have not yet been. 
+
+```{r Plot 1}
+ggplot(bb_train, aes(rWAR, votedBy)) + geom_boxplot(fill = c("green", "blue", "red", "yellow","green","green","yellow")) + theme_bw() + labs(title = "Box Plots of WAR by path to Hall of Fame", y = "Inducted By", x = "Wins-Above-Replacement (WAR)")
+```
+
+Although there are a lot of committees for induction to the Hall of Fame, they can be condensed. The BBWAA is the organization of sportswriters that vote in players that have retired 5-15 years prior. On two occasions (Lou Gehrig and Roberto Clemente), there have been a special election, which can be included under the BBWAA umbrella. Additionally, there is occasionally a run off where only the top voting result is inducted. This process can also be included under BBWAA. Generally after a player is passed on by the BBWAA (this rule has changed historically), they are still eligible for election under the Veterans committee. The first election for the Hall of Fame was in 1936, so a subcommittee of the Veterans committee, the Old Timers committee, was formed to fill in the gaps of older players. These categories can also be combined. Finally, although the Negro League is also a subcommittee of Veterans, I will consider them seperately. Because most of them did not play in the MLB, most of them do not have a WAR statistic. Those that joined the MLB during the integration era have a WAR, but joined the league part-way through their career, so their WAR only reflects a fraction of their career. For those reasons, I will remove the Negro League inductees for now. 
+
+```{r Plot 2}
+# Excludes Negro League players
+bb_train <- bb_train %>% filter(!is.na(rWAR) & votedBy != "Negro League")
+bb_test <- bb_test %>% filter(!is.na(rWAR) & votedBy != "Negro League")
+ggplot(bb_train, aes(rWAR, votedBy2)) + geom_boxplot(fill = c("green", "red", "yellow")) + theme_bw() + labs(title = "Box Plots of WAR by path to Hall of Fame", y = "Inducted By", x = "Wins-Above-Replacement (WAR)")
+```
+
+WAR seems to generally be a good indicator of Hall of Fame status, but there is clearly more to the story. There are definitly some outliers on either side that need some explaining. Perhaps they deserve to be in the Hall of Fame or perhaps there is more to a player's Hall of Fame candidacy than their value, described by WAR. The first step to induction is to be nominated for the BBWAA Hall of Fame ballot (this is determined by a subcomittee of the association nowadays).
+
+```{r Plot 3}
+ggplot(bb_train, aes(rWAR, onBallot, color = preHOFEra)) + geom_jitter() + theme_bw() + labs(title = "WAR by Appearance on BBWAA Ballot", x = "WAR", y = "On the BBWAA Ballot", color = "Retired Before 1922") + scale_color_manual(values = c("blue", "red"))
+```
+
+The blue points represent players that retired before the 1922 season. These players would be ineligible for the first HOF ballot in 1936 under today's standards. Some players from this era were considered, as the rules were not solidifed until much later. However, the Old Timers committee was created to address the issue of underrepresentation amoung the older era, so that would explain why the majority of the higher outliers for WAR that were not included on any BBWAA ballot are from this older era. 
+
+```{r Plot 4}
+bb_train.HOFEra <- bb_train %>% filter(!preHOFEra)
+ggplot(bb_train.HOFEra, aes(rWAR, onBallot, color = inducted)) + geom_jitter() + theme_bw() + labs(title = "WAR by Appearance on BBWAA Ballot", x = "WAR", y = "On the BBWAA Ballot") + scale_color_manual(values = c("yellow", "green"))
+```
+
+
+With the pre Hall of Fame players eliminated, the plot is slighlty improved. There is a pretty clear difference between those eventually inducted in the Hall of Fame and those that were not included on the ballot. However, there are still a significant amount of mediocre to just bad players, considered by WAR that were included on the ballot. Why was Tommy Thevenow included with a career 5.7 WAR? Let's see if a logistic regression can pick up on interesting trends. 
+
+```{r Regression 1}
+mod1 <- glm(onBallot ~ rWAR, data = bb_train.HOFEra, family = "binomial")
+summary(mod1)
+b0 <- mod1$coefficients[1]
+b1 <- mod1$coefficients[2]
+
+get_prob_mod1 <- function(input){
+  prob_new <- (exp(b0 + b1 * input)) / (1 + exp(b0 + b1 * input)) 
+  names(prob_new) <- NULL
+  return(prob_new)
+}
+
+plot_prob_mod1 <- function(input) { 
+  get_prob_mod1(input) + 1
+}
+
+(misclassification_rate <- sum(round(get_prob_mod1(bb_train.HOFEra$rWAR), 0) != bb_train.HOFEra$onBallot) / dim(bb_train.HOFEra)[1])
+
+bb_train.HOFEra$pred1_cor <- round(get_prob_mod1(bb_train.HOFEra$rWAR), 0) != bb_train.HOFEra$onBallot
+
+ggplot(bb_train.HOFEra, aes(rWAR, onBallot, color = bb_train.HOFEra$pred1_cor)) + geom_jitter() + theme_bw() + labs(title = "WAR by Appearance on BBWAA Ballot", x = "WAR", y = "On the BBWAA Ballot", color = "Correctly Predicted?") + stat_function(fun = plot_prob_mod1, color = "red") + scale_color_manual(values = c("green", "red"))
+```
+
+The logistic regression is a decent predictor of ballot inclusion, but it could be improved. Let's add in features and observe changes in predictive ability. 
+
+```{r Regression 2}
+
+# Need to figure out how to deal with missing data. All WAR data is present but need to find a way to fill in data for those that do not have any. Discuss more on Friday 
+
+# mod2 <- glm(onBallot ~ rWAR.B + AB + H + HR + BA + R + RBI + SB + OBP + SLG + OPS + rWAR.P + W + L + ERA + G + GS + SV + IP + SO + WHIP, data = bb_train.HOFEra, family = "binomial")
+# summary(mod2)
+# betas.2 <- mod2$coefficients
+# 
+# get_prob_mod2 <- function(input){
+#   prob_new <- (exp(betas.2[1] + betas.2[2:length(betas.2)] * input)) / (1 + exp(betas.2[1] + betas.2[2:length(betas.2)] * input)) 
+#   names(prob_new) <- NULL
+#   return(prob_new)
+# }
+# 
+# plot_prob_mod2 <- function(input) { 
+#   get_prob_mod1(input) + 1
+# }
+# 
+# (misclassification_rate <- sum(round(get_prob_mod2(bb_train.HOFEra[,c("rWAR.B", "AB", "H", "HR", "BA", "R", "RBI", "SB", "OBP", "SLG", "OPS", "rWAR.P", "W", "L", "ERA", "G", "GS", "SV", "IP", "SO", "WHIP")]), 0) != bb_train.HOFEra$onBallot) / dim(bb_train.HOFEra)[1])
+# 
+# bb_train.HOFEra$pred1_cor <- round(get_prob_mod1(bb_train.HOFEra$rWAR), 0) != bb_train.HOFEra$onBallot
+# 
+# ggplot(bb_train.HOFEra, aes(rWAR, onBallot, color = bb_train.HOFEra$pred1_cor)) + geom_jitter() + theme_bw() + labs(title = "WAR by Appearance on BBWAA Ballot", x = "WAR", y = "On the BBWAA Ballot", color = "Correctly Predicted?") + stat_function(fun = plot_prob_mod1, color = "red") + scale_color_manual(values = c("green", "red"))
+```
