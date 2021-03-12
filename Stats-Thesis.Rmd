@@ -48,21 +48,21 @@ replace_na <- function(vec, rep) {
 # Batting
 emp <- rep(NA, length(unique(Batting$playerID)))
 
-batting_career <- data.frame(playerID = unique(Batting$playerID), firstyearID = emp, lastyearID = emp, G = emp, AB = emp, R = emp, H = emp, X2B = emp, X3B = emp, HR = emp, RBI = emp, SB = emp, CS = emp, BB = emp, SO = emp, IBB = emp, HBP = emp, SH = emp, SF = emp, GIDP = emp)
+batting_career <- data.frame(playerID = unique(Batting$playerID), firstyearID.B = emp, lastyearID.B = emp, G.B = emp, AB = emp, R = emp, H.B = emp, X2B = emp, X3B = emp, HR.B = emp, RBI = emp, SB = emp, CS = emp, BB.B = emp, SO.B = emp, IBB.B = emp, HBP.B = emp, SH.B = emp, SF.B = emp, GIDP.B = emp)
 
 for (i in batting_career$playerID) {
   seasonal <- Batting[Batting$playerID == i,]
-  batting_career[batting_career$playerID == i,-1] <- c(sort(seasonal$yearID)[1], tail(sort(seasonal$yearID), n=1), sum_vec(seasonal$G), sum_vec(seasonal$AB), sum_vec(seasonal$R), sum_vec(seasonal$H), sum_vec(seasonal$X2B), sum_vec(seasonal$X3B), sum_vec(seasonal$HR), sum_vec(seasonal$RBI), sum_vec(seasonal$SB), sum_vec(seasonal$CS), sum_vec(seasonal$BB), sum_vec(seasonal$SO), sum_vec(seasonal$IBB), sum_vec(seasonal$HBP), sum_vec(seasonal$SH), sum_vec(seasonal$SF), sum_vec(seasonal$GIDP))
+  batting_career[batting_career$playerID == i,-1] <- c(min(seasonal$yearID), max(seasonal$yearID), sum_vec(seasonal$G), sum_vec(seasonal$AB), sum_vec(seasonal$R), sum_vec(seasonal$H), sum_vec(seasonal$X2B), sum_vec(seasonal$X3B), sum_vec(seasonal$HR), sum_vec(seasonal$RBI), sum_vec(seasonal$SB), sum_vec(seasonal$CS), sum_vec(seasonal$BB), sum_vec(seasonal$SO), sum_vec(seasonal$IBB), sum_vec(seasonal$HBP), sum_vec(seasonal$SH), sum_vec(seasonal$SF), sum_vec(seasonal$GIDP))
 }
 
 # Pitching
 emp <- rep(NA, length(unique(Pitching$playerID)))
 
-pitching_career <- data.frame(playerID = unique(Pitching$playerID), firstyearID = emp, lastyearID = emp, W = emp, L = emp, G = emp, GS = emp, CG = emp, SHO = emp, SV = emp, IPout = emp, H = emp, ER = emp, HR = emp, BB = emp, SO = emp, BAOpp = emp, ERA = emp, IBB = emp, WP = emp, HBP = emp, BK = emp, BFP = emp, GF = emp, R = emp, SH = emp, SF = emp, GIDP = emp)
+pitching_career <- data.frame(playerID = unique(Pitching$playerID), firstyearID.P = emp, lastyearID.P = emp, W = emp, L = emp, G.P = emp, GS = emp, CG = emp, SHO = emp, SV = emp, IPout = emp, H.P = emp, ER = emp, HR.P = emp, BB.P = emp, SO.P = emp, BAOpp = emp, ERA = emp, IBB.P = emp, WP = emp, HBP.P = emp, BK = emp, BFP = emp, GF = emp, R = emp, SH.P = emp, SF.P = emp, GIDP.P = emp)
 
 for (i in pitching_career$playerID) {
   seasonal <- Pitching[Pitching$playerID == i,]
-  pitching_career[pitching_career$playerID == i,-1] <- c(sort(seasonal$yearID)[1], tail(sort(seasonal$yearID), n=1), sum_vec(seasonal$W), sum_vec(seasonal$L), sum_vec(seasonal$G), sum_vec(seasonal$GS), sum_vec(seasonal$CG), sum_vec(seasonal$SHO), sum_vec(seasonal$SV), sum_vec(seasonal$IPout), sum_vec(seasonal$H), sum_vec(seasonal$ER), sum_vec(seasonal$HR), sum_vec(seasonal$BB), sum_vec(seasonal$SO), NA, NA, sum_vec(seasonal$IBB), sum_vec(seasonal$WP), sum_vec(seasonal$HBP), sum_vec(seasonal$BK), sum_vec(seasonal$BFP), sum_vec(seasonal$GF), sum_vec(seasonal$R), sum_vec(seasonal$SH), sum_vec(seasonal$SF), sum_vec(seasonal$GIDP))
+  pitching_career[pitching_career$playerID == i,-1] <- c(min(seasonal$yearID), max(seasonal$yearID), sum_vec(seasonal$W), sum_vec(seasonal$L), sum_vec(seasonal$G), sum_vec(seasonal$GS), sum_vec(seasonal$CG), sum_vec(seasonal$SHO), sum_vec(seasonal$SV), sum_vec(seasonal$IPout), sum_vec(seasonal$H), sum_vec(seasonal$ER), sum_vec(seasonal$HR), sum_vec(seasonal$BB), sum_vec(seasonal$SO), sum(seasonal$BFP * seasonal$BAOpp) / sum_vec(seasonal$BFP), sum(seasonal$IPout * seasonal$ERA) / sum_vec(seasonal$IPout), sum_vec(seasonal$IBB), sum_vec(seasonal$WP), sum_vec(seasonal$HBP), sum_vec(seasonal$BK), sum_vec(seasonal$BFP), sum_vec(seasonal$GF), sum_vec(seasonal$R), sum_vec(seasonal$SH), sum_vec(seasonal$SF), sum_vec(seasonal$GIDP))
 }
 ```
 
@@ -300,6 +300,13 @@ mod2 <- lm(inducted ~ W + ERA + SO.y + IPout, pitchers)
 summary(mod2)
 mod3 <- lm(inducted ~ W + ERA + SO.y, pitchers)
 summary(mod3)
+pitchers$predictMod2 <- predict(mod2, pitchers)
+mod4 <- lm(inducted ~ rWAR_pitching, pitchers)
+summary(mod4)
+mod5 <- lm(inducted ~ rWAR, pitchers)
+summary(mod5)
+
+glm(inducted ~ W + ERA + SO.y + IPout, pitchers, family = "binomial") %>% summary()
 ```
 
 
@@ -308,13 +315,67 @@ Compute other statistics
 ```{r}
 # Batting
 
-batting_career$AVG <- batting_career$H / batting_career$AB
-batting_career$X1B <- batting_career$H - batting_career$X2B - batting_career$X3B - batting_career$HR
-batting_career$SLG <- (batting_career$X1B + 2*batting_career$X2B + 3*batting_career$X3B + 4*batting_career$HR) / batting_career$AB
-batting_career$PA <- batting_career$AB + batting_career$BB + replace_na(batting_career$HBP, 0) + replace_na(batting_career$SF, 0) + replace_na(batting_career$SH, 0) 
-batting_career$OBP <- (batting_career$H + batting_career$BB + replace_na(batting_career$HBP, 0)) / (batting_career$PA - replace_na(batting_career$SH, 0))
+batting_career$AVG <- batting_career$H.B / batting_career$AB
+batting_career$X1B <- batting_career$H.B - batting_career$X2B - batting_career$X3B - batting_career$HR.B
+batting_career$SLG <- (batting_career$X1B + 2*batting_career$X2B + 3*batting_career$X3B + 4*batting_career$HR.B) / batting_career$AB
+batting_career$PA <- batting_career$AB + batting_career$BB.B + replace_na(batting_career$HBP.B, 0) + replace_na(batting_career$SF.B, 0) + replace_na(batting_career$SH.B, 0) 
+batting_career$OBP <- (batting_career$H.B + batting_career$BB.B + replace_na(batting_career$HBP.B, 0)) / (batting_career$PA - replace_na(batting_career$SH.B, 0))
 batting_career$OPS <- batting_career$OBP + batting_career$SLG
 batting_career$SBP <- batting_career$SB / (batting_career$SB + batting_career$CS)
 
+final_batting <- batting_career %>% dplyr::select(playerID, firstyearID.B, lastyearID.B, AB, H.B, HR.B, AVG, R, RBI, SB, OBP, SLG, OPS)
+
+# Pitching
+
+pitching_career$AB.P <- pitching_career$BFP - pitching_career$BB.P - replace_na(pitching_career$HBP.P, 0) - replace_na(pitching_career$SF.P, 0) - replace_na(pitching_career$SH.P, 0)
+pitching_career$BAOpp <- pitching_career$H.P / pitching_career$AB.P
+pitching_career$WHIP <- (pitching_career$BB.P + pitching_career$H.P) / (pitching_career$IPout / 3)
+pitching_career$IP <- pitching_career$IPout / 3
+
+final_pitching <- pitching_career %>% dplyr::select(playerID, firstyearID.P, lastyearID.P, W, L, ERA, G.P, GS, SV, IP, SO.P, WHIP)
 ```
+
+```{r Hall of Fame Dataset}
+data("HallOfFame")
+HallOfFame2 <- data.frame()
+HallOfFame <- HallOfFame %>% filter(category == "Player" & ((votedBy == "Veterans" & inducted == 'Y') | votedBy != "Veterans") & votedBy != "Nominating Vote") %>% mutate(percentVote = votes / ballots)
+for (i in sort(unique(HallOfFame$playerID))) {
+  temp <- HallOfFame %>% filter(playerID == i) 
+  bbwaa <- temp %>% filter(votedBy == "BBWAA" | votedBy == "Special Election" | votedBy == "Final Ballot")
+  induction <- temp %>% filter(inducted == 'Y')
+  lastYear <- temp %>% filter(yearID == max(yearID))
+  perVote <- na.omit(temp$percentVote)
+  HallOfFame2 <- rbind(HallOfFame2, data.frame(playerID = i, firstYearHOF = min(temp$yearID), lastYearHOF = max(temp$yearID), ballots = dim(bbwaa)[1], inducted = as.logical(dim(induction)[1]), votedBy = ifelse(dim(induction)[1] > 0, induction$votedBy, NA), percentVote = ifelse(length(perVote) == 0, NA, max(perVote))))
+}
+HallOfFame2$onBallot <- HallOfFame2$ballots > 0
+HallOfFame2[HallOfFame2$playerID == "clemero01", "percentVote"] <- 393/420
+HallOfFame2[HallOfFame2$playerID == "gehrilo01", "percentVote"] <- NA
+fwrite(HallOfFame2, "hof.csv")
+```
+
+```{r Combine Stats to one dataframe}
+rWAR <- fread("rWAR.csv")
+data("Master")
+hof <- fread("hof.csv")
+
+Master2 <- left_join(Master, rWAR, by = "playerID") %>% left_join(hof, by = "playerID", all = TRUE)
+Master2[is.na(Master2$ballots), "ballots"] <- 0
+Master2[is.na(Master2$inducted), "inducted"] <- FALSE
+Master2[is.na(Master2$onBallot), "onBallot"] <- FALSE
+Master2$banned <- FALSE
+Master2[Master2$votedBy == "" & !is.na(Master2$votedBy), "votedBy"] <- NA
+
+banned_players <- c("bechtge01", "devliji01", "hallge01", "nichoal01", "cravebi01", "highadi01", "o'conja01", "howelha01", "fogelho99", "chaseha01", "zimmehe01", "cicoted01", "willile01", "gandich01", "mcmulfr01", "risbesw01", "felscha01", "jacksjo01", "weavebu01", "gedeojo01", "paulege01", "kauffbe01", "mageele01", "douglph01", "o'conji01", "dolanco02", "rosepe01")
+
+Master2[Master2$bbrefID.x %in% banned_players,"banned"] <- TRUE
+Master2 <- Master2 %>% mutate(name = paste0(nameFirst, " ", nameLast))
+Master2 <- left_join(Master2, final_batting, by = "playerID")
+Master2 <- left_join(Master2, final_pitching, by = "playerID")
+Master2 <- Master2 %>% dplyr::select(playerID, bbrefID.x, name, debut, finalGame, rWAR, firstyearID.B, lastyearID.B, rWAR_batting, AB, H.B, HR.B, AVG, R, RBI, SB, OBP, SLG, OPS, firstyearID.P, lastyearID.P, rWAR_pitching, W, L, ERA, G.P, GS, SV, IP, SO.P, WHIP, firstYearHOF, lastYearHOF, ballots, onBallot, inducted, votedBy, percentVote, banned)
+colnames(Master2) <- c("playerID", "bbrefID", "name", "debut", "finalGame", "rWAR", "firstYearID.B", "lastYearID.B", "rWAR.B", "AB", "H", "HR", "BA", "R", "RBI", "SB", "OBP", "SLG", "OPS", "firstYearID.P", "lastYearID.P", "rWAR.P", "W", "L", "ERA", "G", "GS", "SV", "IP", "SO", "WHIP", "firstYearHOF", "lastYearHOF", "ballots", "onBallot", "inducted", "votedBy", "percentVote", "banned")
+Master2[Master2$AB == 0 & !is.na(Master2$AB),c("BA", "OBP", "SLG", "OPS")] <- NA
+
+fwrite(Master2, "baseball.csv")
+```
+
 

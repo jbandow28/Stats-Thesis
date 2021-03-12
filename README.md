@@ -1,5 +1,11 @@
 # Timeline 
 
+Deliverables for 3/12:
+* Create new R-Markdown doc to separate scraping/cleaning code from analysis presentation
+* Look into logistic modeling for induction regressions
+* Research/clean up edge cases
+* Look for other predictors of HOF status in literature
+
 Deliverables for 3/5:
 * Finish filling in gaps for fansgraphs WAR
 * Improve model, incorporate more than just WAR
