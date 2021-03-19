@@ -1,5 +1,11 @@
 # Timeline 
 
+Deliverables for 3/26:
+* Organize code into scratch work/final code
+* Balance positives/negatives better
+* Look into improving modeling (nonparametrics?)
+* Start to creat outline for paper
+
 Deliverables for 3/19:
 * Add ROC curves to analysis
 * Explore position splits in regression/add in position-specific statistics
