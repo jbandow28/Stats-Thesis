@@ -185,9 +185,11 @@ Master2$fWAR <- ifelse(is.na(Master2$fWAR_bat) & is.na(Master2$fWAR_pitch), NA, 
 
 # Baseball Reference WAR
 
+data("Master")
 rWAR <- data.frame(playerID = Master$playerID, bbrefID = Master$bbrefID, finalGame = Master$finalGame, rWAR = NA, rWAR_batting = NA, rWAR_pitching = NA)
 rWAR[7443,"bbrefID"] <- "harribe01"
-rWAR <- rWAR[-5905,]
+rWAR <- rWAR[-c(5905, 9450),]
+rWAR <- rWAR[str_sub(rWAR$bbrefID, -2, -1) != "99",]
 
 get_rWAR <- function(row) {
   if (!is.na(row["bbrefID"]) & !is.na(row["finalGame"])) {
@@ -209,105 +211,34 @@ get_rWAR2 <- function(row) {
   total <- page %>% html_nodes(".p1 div:nth-child(1) p+ p") %>% html_text() %>% as.numeric()
   if (length(total) == 0) total <- page %>% html_nodes(".p1 div:nth-child(1) p") %>% html_text() %>% as.numeric()
   new_page <- page %>% html_nodes(xpath = '//comment()') %>% html_text() %>% paste(collapse = '') %>% read_html()
+  
   batting <- new_page %>% html_nodes("#batting_value tfoot tr:nth-child(1) .right:nth-child(14)") %>% html_text() %>% as.numeric()
-  if (length(batting) == 0) batting <- NA
-  pitching <- new_page %>% html_nodes("#pitching_value tfoot tr:nth-child(1) .right:nth-child(17)") %>% html_text() %>% as.numeric()
-  if (length(pitching) == 0) pitching <- NA
-  else {
-    pitching2 <- new_page %>% html_nodes("#pitching_value tfoot tr:nth-child(1) .right:nth-child(18)") %>% html_text() %>% as.numeric()
-    pitch_approx <- total - ifelse(is.na(batting),0,batting)
-    if (abs(pitch_approx - pitching) > abs(pitch_approx - pitching2)) {
-      pitching <- pitching2
-    }
+  if (length(batting) == 0) batting <- 0
+  
+  pitching <- new_page %>% html_nodes("#pitching_value .poptip:nth-child(13)") %>% html_text()
+  if (length(pitching) == 0) {
+    pitching <- 0
+  } else if (pitching == "RA9extras") {
+    pitching <- new_page %>% html_nodes("#pitching_value tfoot tr:nth-child(1) .right:nth-child(18)") %>% html_text() %>% as.numeric()
+  } else {
+    pitching <- new_page %>% html_nodes("#pitching_value tfoot tr:nth-child(1) .right:nth-child(17)") %>% html_text() %>% as.numeric()
   }
+
   return(c(total, batting, pitching))
 }
 
 t <- 0
-for (i in 9449:dim(rWAR)[1]) {
+for (i in 7860:dim(rWAR)[1]) {
   t <- t + 1/dim(rWAR)[1]
   print(t)
-  rWAR[i,c("rWAR", "rWAR_batting", "rWAR_pitching")] <- get_rWAR(rWAR[i,])
+  rWAR[i,c("rWAR", "rWAR_batting", "rWAR_pitching")] <- get_rWAR2(rWAR[i,])
 }
-rWAR <- rWAR[-9449,]
-rWAR$bbrefCode <- str_sub(rWAR$bbrefID, -2, -1) %>% as.numeric()
-rWAR <- rWAR[rWAR$bbrefCode != 99,]
-for (i in 1:dim(rWAR[is.na(rWAR$rWAR),])[1]) {
-  rWAR[is.na(rWAR$rWAR),][i,c("rWAR", "rWAR_batting", "rWAR_pitching")] <- get_rWAR2(rWAR[is.na(rWAR$rWAR),][i,])
-}
+rWAR[is.na(rWAR$rWAR_pitching),"rWAR_pitching"] <- 0
+
 rWAR <- rWAR %>% select(playerID, bbrefID, rWAR, rWAR_batting, rWAR_pitching)
 fwrite(rWAR, "rWAR.csv")
 ```
 
-
-Plots 
-
-```{r, include=FALSE}
-
-Master2_plots <- Master2 %>% dplyr::select("playerID", "fangraphsID", "bbrefID", "Name", "fWAR", "rWAR")
-Master2_plots <- Master2_plots[complete.cases(Master2_plots),]
-plot(x = Master2_plots$rWAR, y = Master2_plots$fWAR, pch = 16, main = "Baseball-Reference vs. FanGraphs WAR", xlab = "Baseball-Reference WAR", ylab = "FanGraphs WAR")
-summary(lm(Master2_plots$rWAR ~ Master2_plots$fWAR))
-```
-
-
-Hall of Fame Data
-
-```{r}
-HallOfFame2 <- HallOfFame %>% filter(category == "Player")
-All_stats <- merge(HallOfFame2[HallOfFame2$inducted == 'Y', c("playerID", "inducted", "votedBy")], rWAR, by = "playerID", all = TRUE)
-All_stats[is.na(All_stats$inducted),"inducted"] <- 'N'
-All_stats <- left_join(All_stats, Master[,c("playerID", "nameFirst", "nameLast", "finalGame")], by = "playerID")
-All_stats <- All_stats %>% filter(finalGame < as.Date("2004-01-01"))
-All_stats <- All_stats %>% filter(!(playerID %in% c("brownwi02", "irvinmo01", "paigesa01")))
-All_stats$inducted <- ifelse(All_stats$inducted == 'Y', TRUE, FALSE)
-fig1 <- ggplot(All_stats, aes(inducted, rWAR, color = votedBy, text = paste(nameFirst, nameLast, sep = " "))) + geom_point() + theme_bw() + labs(title = "rWAR vs. Method of Induction", x = "Induction Status", y = "rWAR")
-ggsave("fig1.pdf", fig1)
-res1 <- summary(lm(inducted ~ rWAR, All_stats))
-
-
-HOF_BBWAA <- HallOfFame %>% filter(votedBy == "BBWAA")
-HOF_BBWAA$percentVote <- HOF_BBWAA$votes / HOF_BBWAA$ballots
-HOF_BBWAA_collapsed <- data.frame()
-for (i in unique(HOF_BBWAA$playerID)) {
-  temp <- HOF_BBWAA %>% filter(playerID == i)
-  res <- c(i, max(temp$yearID), max(temp$yearID) - min(temp$yearID) + 1, ifelse('Y' %in% temp$inducted, 'Y', 'N'), max(temp$percentVote))
-  HOF_BBWAA_collapsed <- rbind(HOF_BBWAA_collapsed, res)
-}
-colnames(HOF_BBWAA_collapsed) <- c("playerID", "finalYear", "totalYears", "BBWAAInducted", "maxPercentVote")
-
-All_stats <- left_join(All_stats, HOF_BBWAA_collapsed, by = "playerID")
-All_stats$onBallet <- !is.na(All_stats$BBWAAInducted)
-All_stats[is.na(All_stats$maxPercentVote),]$maxPercentVote <- 0
-All_stats$maxPercentVote <- All_stats$maxPercentVote %>% as.numeric
-
-fig2 <- ggplot(All_stats, aes(maxPercentVote, rWAR, color = BBWAAInducted)) + geom_point() + theme_bw() + labs(title = "Percent Vote vs. rWAR by BBWAA Results", x = "Maximum Percent Vote", y = "rWAR")
-ggsave("fig2.pdf", fig2)
-fig3 <- ggplot(All_stats, aes(maxPercentVote, rWAR, color = votedBy, text = paste(nameFirst, nameLast, sep = " "))) + geom_point() + theme_bw() + labs(title = "Percent Vote vs. rWAR by Method of Induction", x = "Maximum Percent Vote", y = "rWAR")
-ggsave("fig3.pdf", fig3)
-```
-
-
-Combine Batting/Pitching w/ HOF data
-
-```{r}
-All_stats <- left_join(All_stats, batting_career, by = "playerID")
-All_stats <- left_join(All_stats, pitching_career, by = "playerID")
-pitchers <- All_stats %>% filter(!is.na(G.y)) %>% filter(IPout > 0) %>% filter(GS > 5)
-pitchers$ERA <- pitchers$ER / (pitchers$IPout / 27) 
-pitchers$inducted <- as.numeric(pitchers$inducted * 1)
-mod2 <- lm(inducted ~ W + ERA + SO.y + IPout, pitchers)
-summary(mod2)
-mod3 <- lm(inducted ~ W + ERA + SO.y, pitchers)
-summary(mod3)
-pitchers$predictMod2 <- predict(mod2, pitchers)
-mod4 <- lm(inducted ~ rWAR_pitching, pitchers)
-summary(mod4)
-mod5 <- lm(inducted ~ rWAR, pitchers)
-summary(mod5)
-
-glm(inducted ~ W + ERA + SO.y + IPout, pitchers, family = "binomial") %>% summary()
-```
 
 
 Compute other statistics
@@ -323,7 +254,7 @@ batting_career$OBP <- (batting_career$H.B + batting_career$BB.B + replace_na(bat
 batting_career$OPS <- batting_career$OBP + batting_career$SLG
 batting_career$SBP <- batting_career$SB / (batting_career$SB + batting_career$CS)
 
-final_batting <- batting_career %>% dplyr::select(playerID, firstyearID.B, lastyearID.B, AB, H.B, HR.B, AVG, R, RBI, SB, OBP, SLG, OPS)
+final_batting <- batting_career %>% dplyr::select(playerID, firstyearID.B, lastyearID.B, BB.B, G.B, AB, H.B, HR.B, AVG, R, RBI, SB, OBP, SLG, OPS)
 
 # Pitching
 
@@ -353,12 +284,131 @@ HallOfFame2[HallOfFame2$playerID == "gehrilo01", "percentVote"] <- NA
 fwrite(HallOfFame2, "hof.csv")
 ```
 
+```{r Fielding Data}
+data("Fielding")
+Fielding[is.na(Fielding$E), "E"] <- 0
+
+Fielding2 <- data.frame()
+for (i in unique(Fielding$playerID)) {
+  temp <- Fielding %>% filter(playerID == i)
+  Fielding2 <- rbind(Fielding2, data.frame(playerID = i, PO = sum(temp$PO), A = sum(temp$A), E = sum(temp$E), P = sum(temp[temp$POS == "P",]$G), C = sum(temp[temp$POS == "C",]$G), X1B = sum(temp[temp$POS == "1B",]$G), X2B = sum(temp[temp$POS == "2B",]$G), X3B = sum(temp[temp$POS == "3B",]$G), SS = sum(temp[temp$POS == "SS",]$G), OF = sum(temp[temp$POS == "OF",]$G)))
+}
+
+Fielding2$pitchPer <- Fielding2$P / (Fielding2$P + Fielding2$C + Fielding2$X1B + Fielding2$X2B + Fielding2$X3B + Fielding2$SS + Fielding2$OF)
+Fielding2$batPer <- (Fielding2$C + Fielding2$X1B + Fielding2$X2B + Fielding2$X3B + Fielding2$SS + Fielding2$OF) / (Fielding2$P + Fielding2$C + Fielding2$X1B + Fielding2$X2B + Fielding2$X3B + Fielding2$SS + Fielding2$OF)
+Fielding2 <- Fielding2 %>% select(playerID, PO, A, E, pitchPer, batPer)
+fwrite(Fielding2, "positions.csv")
+```
+
+```{r Position/Team}
+data("Appearances")
+
+apps <- data.frame()
+for(i in unique(Appearances$playerID)) {
+  temp <- Appearances %>% filter(playerID == i)
+  most_games <- 0
+  for (j in unique(temp$teamID)) {
+    curr_games <- sum(temp[temp$teamID == j,"G_all"])
+    if(curr_games > most_games) {
+      most_team <- j
+      most_games <- curr_games
+    }
+  }
+  apps <- rbind(apps, data.frame(playerID = i, team = j, P = sum(temp$G_p), C = sum(temp$G_c), X1B = sum(temp$G_1b), X2B = sum(temp$G_2b), X3B = sum(temp$G_3b), SS = sum(temp$G_ss), LF = sum(temp$G_lf), CF = sum(temp$G_cf), RF = sum(temp$G_rf), DH = sum(temp$G_dh), PH = sum(temp$G_ph), PR = sum(temp$G_pr)))
+}
+
+apps[is.na(apps$DH),"DH"] <- 0
+apps[is.na(apps$PH),"PH"] <- 0
+apps[is.na(apps$PR),"PR"] <- 0
+pos <- c("P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "PH", "PR")
+apps$position <- pos[apply(apps[,c(3:14)], 1, order)[12,]]
+apps <- apps %>% select(playerID, team, position)
+fwrite(apps, "apps.csv")
+```
+
+```{r Player Awards}
+data("AwardsPlayers")
+
+# Need: Gold Gloves, MVP Awards
+awards <- AwardsPlayers %>% filter(awardID == "Gold Glove" | awardID == "Most Valuable Player")
+awards2 <- data.frame()
+for (i in unique(awards$playerID)) {
+  temp <- awards %>% filter(playerID == i)
+  awards2 <- rbind(awards2, data.frame(playerID = i, goldGloves = sum(temp$awardID == "Gold Glove"), MVPs = sum(temp$awardID == "Most Valuable Player")))
+}
+fwrite(awards2, "awards.csv")
+```
+
+
+```{r Post season data}
+data("AllstarFull")
+
+allstars <- data.frame()
+for (i in unique(AllstarFull$playerID)) {
+  temp <- AllstarFull %>% filter(playerID == i) 
+  allstars <- rbind(allstars, data.frame(playerID = i, aStarApp = length(unique(temp$yearID))))
+}
+fwrite(allstars, "allstars.csv")
+```
+
+```{r Postseason Batting}
+data("BattingPost")
+data("SeriesPost")
+
+batPost <- data.frame()
+for (i in unique(BattingPost$playerID)) {
+  temp <- BattingPost %>% filter(playerID == i)
+  batPost <- rbind(batPost, data.frame(playerID = i, GPost = sum(temp$G), H = sum(temp$H), AB = sum(temp$AB)))
+}
+batPost$BAPost <- batPost$H / batPost$AB
+
+
+SeriesPost2 <- SeriesPost %>% filter(round == "WS" | round == "CS") %>% select(yearID, teamIDwinner, wins, losses)
+colnames(SeriesPost2) <- c("yearID", "teamID", "WSWins", "WSLosses")
+BattingPost2 <- BattingPost %>% filter(round == "WS" | round == "CS")
+BattingPost2 <- left_join(BattingPost2, SeriesPost2, by = c("yearID", "teamID"))
+SeriesPost2 <- SeriesPost %>% filter(round == "WS" | round == "CS") %>% select(yearID, teamIDloser, wins, losses)
+colnames(SeriesPost2) <- c("yearID", "teamID", "WSLosses", "WSWins")
+BattingPost2 <- left_join(BattingPost2, SeriesPost2, by = c("yearID", "teamID"))
+BattingPost2$WSWins <- ifelse(is.na(BattingPost2$WSWins.x), 0, BattingPost2$WSWins.x) + ifelse(is.na(BattingPost2$WSWins.y), 0, BattingPost2$WSWins.y)
+BattingPost2$WSLosses <- ifelse(is.na(BattingPost2$WSLosses.x), 0, BattingPost2$WSLosses.x) + ifelse(is.na(BattingPost2$WSLosses.y), 0, BattingPost2$WSLosses.y)
+
+batPost2 <- data.frame()
+for (i in unique(BattingPost2$playerID)) {
+  temp <- BattingPost2 %>% filter(playerID == i)
+  batPost2 <- rbind(batPost2, data.frame(playerID = i, WSW = sum(temp$WSWins), WSL = sum(temp$WSLosses)))
+}
+
+batPost <- left_join(batPost, batPost2, by = "playerID", all = TRUE)
+
+batPost <- batPost %>% select(playerID, GPost, BAPost, WSW, WSL)
+fwrite(batPost, "batPost.csv")
+```
+
 ```{r Combine Stats to one dataframe}
 rWAR <- fread("rWAR.csv")
 data("Master")
 hof <- fread("hof.csv")
+positions <- fread("positions.csv")
+awards <- fread("awards.csv")
+allstars <- fread("allstars.csv")
+apps <- fread("apps.csv")
+batPost <- fread("batPost.csv")
 
-Master2 <- left_join(Master, rWAR, by = "playerID") %>% left_join(hof, by = "playerID", all = TRUE)
+Master2 <- left_join(Master, rWAR, by = "playerID")
+Master2 <- left_join(Master2, hof, by = "playerID", all = TRUE)
+Master2 <- left_join(Master2, positions, by = "playerID", all = TRUE)
+Master2 <- left_join(Master2, awards, by = "playerID", all = TRUE)
+Master2 <- left_join(Master2, allstars, by = "playerID",  all = TRUE)
+Master2 <- left_join(Master2, apps, by = "playerID", all = TRUE)
+Master2 <- left_join(Master2, batPost, by = "playerID", all = TRUE)
+Master2[is.na(Master2$GPost), "GPost"] <- 0
+Master2[is.na(Master2$BAPost), "BAPost"] <- 0
+Master2[is.na(Master2$WSW), "WSW"] <- 0
+Master2[is.na(Master2$WSL), "WSL"] <- 0
+Master2[is.na(Master2$aStarApp),"aStarApp"] <- 0
+Master2[is.na(Master2$goldGloves),"goldGloves"] <- 0
+Master2[is.na(Master2$MVPs),"MVPs"] <- 0
 Master2[is.na(Master2$ballots), "ballots"] <- 0
 Master2[is.na(Master2$inducted), "inducted"] <- FALSE
 Master2[is.na(Master2$onBallot), "onBallot"] <- FALSE
@@ -371,11 +421,13 @@ Master2[Master2$bbrefID.x %in% banned_players,"banned"] <- TRUE
 Master2 <- Master2 %>% mutate(name = paste0(nameFirst, " ", nameLast))
 Master2 <- left_join(Master2, final_batting, by = "playerID")
 Master2 <- left_join(Master2, final_pitching, by = "playerID")
-Master2 <- Master2 %>% dplyr::select(playerID, bbrefID.x, name, debut, finalGame, rWAR, firstyearID.B, lastyearID.B, rWAR_batting, AB, H.B, HR.B, AVG, R, RBI, SB, OBP, SLG, OPS, firstyearID.P, lastyearID.P, rWAR_pitching, W, L, ERA, G.P, GS, SV, IP, SO.P, WHIP, firstYearHOF, lastYearHOF, ballots, onBallot, inducted, votedBy, percentVote, banned)
-colnames(Master2) <- c("playerID", "bbrefID", "name", "debut", "finalGame", "rWAR", "firstYearID.B", "lastYearID.B", "rWAR.B", "AB", "H", "HR", "BA", "R", "RBI", "SB", "OBP", "SLG", "OPS", "firstYearID.P", "lastYearID.P", "rWAR.P", "W", "L", "ERA", "G", "GS", "SV", "IP", "SO", "WHIP", "firstYearHOF", "lastYearHOF", "ballots", "onBallot", "inducted", "votedBy", "percentVote", "banned")
+Master2 <- Master2 %>% dplyr::select(playerID, bbrefID.x, name, bats, throws, debut, finalGame, team, position, PO, A, E, rWAR, pitchPer, batPer, firstyearID.B, lastyearID.B, rWAR_batting, AB, H.B, HR.B, BB.B, G.B, AVG, R, RBI, SB, OBP, SLG, OPS, firstyearID.P, lastyearID.P, rWAR_pitching, W, L, ERA, G.P, GS, SV, IP, SO.P, WHIP, GPost, BAPost, WSW, WSL, goldGloves, MVPs, aStarApp, firstYearHOF, lastYearHOF, ballots, onBallot, inducted, votedBy, percentVote, banned)
+colnames(Master2) <- c("playerID", "bbrefID", "name", "bats", "throws", "debut", "finalGame", "team", "position", "PO", "A", "E", "rWAR", "pitchPer", "batPer", "firstYearID.B", "lastYearID.B", "rWAR.B", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "SB", "OBP", "SLG", "OPS", "firstYearID.P", "lastYearID.P", "rWAR.P", "W", "L", "ERA", "G.P", "GS", "SV", "IP", "SO", "WHIP", "GPost", "BAPost", "WSW", "WSL", "goldGloves", "MVPs", "allStarApps", "firstYearHOF", "lastYearHOF", "ballots", "onBallot", "inducted", "votedBy", "percentVote", "banned")
 Master2[Master2$AB == 0 & !is.na(Master2$AB),c("BA", "OBP", "SLG", "OPS")] <- NA
 
 fwrite(Master2, "baseball.csv")
 ```
+
+
 
 
