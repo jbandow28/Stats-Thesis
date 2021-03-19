@@ -291,12 +291,11 @@ Fielding[is.na(Fielding$E), "E"] <- 0
 Fielding2 <- data.frame()
 for (i in unique(Fielding$playerID)) {
   temp <- Fielding %>% filter(playerID == i)
-  Fielding2 <- rbind(Fielding2, data.frame(playerID = i, PO = sum(temp$PO), A = sum(temp$A), E = sum(temp$E), P = sum(temp[temp$POS == "P",]$G), C = sum(temp[temp$POS == "C",]$G), X1B = sum(temp[temp$POS == "1B",]$G), X2B = sum(temp[temp$POS == "2B",]$G), X3B = sum(temp[temp$POS == "3B",]$G), SS = sum(temp[temp$POS == "SS",]$G), OF = sum(temp[temp$POS == "OF",]$G)))
+  Fielding2 <- rbind(Fielding2, data.frame(playerID = i, PO = sum(temp$PO), A = sum(temp$A), E = sum(temp$E)))
 }
 
-Fielding2$pitchPer <- Fielding2$P / (Fielding2$P + Fielding2$C + Fielding2$X1B + Fielding2$X2B + Fielding2$X3B + Fielding2$SS + Fielding2$OF)
-Fielding2$batPer <- (Fielding2$C + Fielding2$X1B + Fielding2$X2B + Fielding2$X3B + Fielding2$SS + Fielding2$OF) / (Fielding2$P + Fielding2$C + Fielding2$X1B + Fielding2$X2B + Fielding2$X3B + Fielding2$SS + Fielding2$OF)
-Fielding2 <- Fielding2 %>% select(playerID, PO, A, E, pitchPer, batPer)
+
+Fielding2 <- Fielding2 %>% select(playerID, PO, A, E)
 fwrite(Fielding2, "positions.csv")
 ```
 
@@ -317,12 +316,17 @@ for(i in unique(Appearances$playerID)) {
   apps <- rbind(apps, data.frame(playerID = i, team = j, P = sum(temp$G_p), C = sum(temp$G_c), X1B = sum(temp$G_1b), X2B = sum(temp$G_2b), X3B = sum(temp$G_3b), SS = sum(temp$G_ss), LF = sum(temp$G_lf), CF = sum(temp$G_cf), RF = sum(temp$G_rf), DH = sum(temp$G_dh), PH = sum(temp$G_ph), PR = sum(temp$G_pr)))
 }
 
+
 apps[is.na(apps$DH),"DH"] <- 0
 apps[is.na(apps$PH),"PH"] <- 0
 apps[is.na(apps$PR),"PR"] <- 0
 pos <- c("P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "PH", "PR")
 apps$position <- pos[apply(apps[,c(3:14)], 1, order)[12,]]
-apps <- apps %>% select(playerID, team, position)
+
+apps$pitchPer <- apps$P / (apps$P + apps$C + apps$X1B + apps$X2B + apps$X3B + apps$SS + apps$RF + apps$CF + apps$LF + apps$DH + apps$PH + apps$PR)
+apps$batPer <- (apps$C + apps$X1B + apps$X2B + apps$X3B + apps$SS + apps$RF + apps$CF + apps$LF + apps$DH + apps$PH) / (apps$P + apps$C + apps$X1B + apps$X2B + apps$X3B + apps$SS + apps$RF + apps$CF + apps$LF + apps$DH + apps$PH + apps$PR)
+
+apps <- apps %>% select(playerID, team, position, pitchPer, batPer)
 fwrite(apps, "apps.csv")
 ```
 
@@ -417,12 +421,17 @@ Master2[Master2$votedBy == "" & !is.na(Master2$votedBy), "votedBy"] <- NA
 
 banned_players <- c("bechtge01", "devliji01", "hallge01", "nichoal01", "cravebi01", "highadi01", "o'conja01", "howelha01", "fogelho99", "chaseha01", "zimmehe01", "cicoted01", "willile01", "gandich01", "mcmulfr01", "risbesw01", "felscha01", "jacksjo01", "weavebu01", "gedeojo01", "paulege01", "kauffbe01", "mageele01", "douglph01", "o'conji01", "dolanco02", "rosepe01")
 
+mitchell_report <- c("caminke01", "cansejo01", "dykstle01", "joynewa01", "mcgwima01", "turnbde01", "alexama02", "bonesri01", "cabreal02", "crawfpa02", "gonzaju03", "grimsja01", "palmera01", "benarma01", "bondsba01", "estalbo02", "giambja01", "giambje01", "riosar01", "santibe01", "sheffga01", "velarra01", "allench01", "bellmi02", "bennega01", "bigbila01", "brownke01", "carrema01", "chrisja01", "clarkho02", "clemero02", "custja01", "donnebr01", "donnech01", "francma01", "frankry01", "gagneer01", "hairsje02", "hergema01", "hiattph01", "hillgl01", "hundlto01", "juddmi01", "justida01", "knoblch01", "lakerti01", "lansimi01", "loducpa01", "loganno01", "manzajo01", "mckayco01", "merckke01", "miadiba01", "morriha02", "naultda01", "neaglde01", "parquji01", "pettian01", "piattad01", "prattto02", "randost01", "riggsad01", "roberbr01", "seguida01", "santaf.01", "stantmi02", "stoneri01", "tejadmi01", "vaughmo01", "villoro01", "vinafe01", "whitero02", "willije02", "willito02", "youngke01", "zaungr01", "ankieri01", "bellda01", "byrdpa01", "gibboja01", "glaustr01", "guilljo01", "holmeda01", "matthga02", "rockejo01", "schoesc01", "valdeis01", "willima04", "woodast01")
+
+
 Master2[Master2$bbrefID.x %in% banned_players,"banned"] <- TRUE
+Master2[Master2$bbrefID.x %in% mitchell_report, "steriods"] <- TRUE
+Master2[is.na(Master2$steriods),"steriods"] <- FALSE
 Master2 <- Master2 %>% mutate(name = paste0(nameFirst, " ", nameLast))
 Master2 <- left_join(Master2, final_batting, by = "playerID")
 Master2 <- left_join(Master2, final_pitching, by = "playerID")
-Master2 <- Master2 %>% dplyr::select(playerID, bbrefID.x, name, bats, throws, debut, finalGame, team, position, PO, A, E, rWAR, pitchPer, batPer, firstyearID.B, lastyearID.B, rWAR_batting, AB, H.B, HR.B, BB.B, G.B, AVG, R, RBI, SB, OBP, SLG, OPS, firstyearID.P, lastyearID.P, rWAR_pitching, W, L, ERA, G.P, GS, SV, IP, SO.P, WHIP, GPost, BAPost, WSW, WSL, goldGloves, MVPs, aStarApp, firstYearHOF, lastYearHOF, ballots, onBallot, inducted, votedBy, percentVote, banned)
-colnames(Master2) <- c("playerID", "bbrefID", "name", "bats", "throws", "debut", "finalGame", "team", "position", "PO", "A", "E", "rWAR", "pitchPer", "batPer", "firstYearID.B", "lastYearID.B", "rWAR.B", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "SB", "OBP", "SLG", "OPS", "firstYearID.P", "lastYearID.P", "rWAR.P", "W", "L", "ERA", "G.P", "GS", "SV", "IP", "SO", "WHIP", "GPost", "BAPost", "WSW", "WSL", "goldGloves", "MVPs", "allStarApps", "firstYearHOF", "lastYearHOF", "ballots", "onBallot", "inducted", "votedBy", "percentVote", "banned")
+Master2 <- Master2 %>% dplyr::select(playerID, bbrefID.x, name, bats, throws, debut, finalGame, team, position, PO, A, E, rWAR, pitchPer, batPer, firstyearID.B, lastyearID.B, rWAR_batting, AB, H.B, HR.B, BB.B, G.B, AVG, R, RBI, SB, OBP, SLG, OPS, firstyearID.P, lastyearID.P, rWAR_pitching, W, L, ERA, G.P, GS, SV, IP, SO.P, WHIP, GPost, BAPost, WSW, WSL, goldGloves, MVPs, aStarApp, firstYearHOF, lastYearHOF, ballots, onBallot, inducted, votedBy, percentVote, banned, steriods)
+colnames(Master2) <- c("playerID", "bbrefID", "name", "bats", "throws", "debut", "finalGame", "team", "position", "PO", "A", "E", "rWAR", "pitchPer", "batPer", "firstYearID.B", "lastYearID.B", "rWAR.B", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "SB", "OBP", "SLG", "OPS", "firstYearID.P", "lastYearID.P", "rWAR.P", "W", "L", "ERA", "G.P", "GS", "SV", "IP", "SO", "WHIP", "GPost", "BAPost", "WSW", "WSL", "goldGloves", "MVPs", "allStarApps", "firstYearHOF", "lastYearHOF", "ballots", "onBallot", "inducted", "votedBy", "percentVote", "banned", "steriods")
 Master2[Master2$AB == 0 & !is.na(Master2$AB),c("BA", "OBP", "SLG", "OPS")] <- NA
 
 fwrite(Master2, "baseball.csv")

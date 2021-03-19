@@ -18,6 +18,10 @@ library(stringr)
 baseball <- fread("baseball.csv")
 ```
 
+```{r Organize Data}
+
+```
+
 ```{r Edit data}
 baseball[baseball$votedBy == "", "votedBy"] <- "Not Inducted"
 baseball$votedBy2 <- baseball$votedBy
@@ -26,11 +30,19 @@ baseball[baseball$votedBy2 == "Run Off", "votedBy2"] <- "BBWAA"
 baseball[baseball$votedBy2 == "Special Election", "votedBy2"] <- "BBWAA"
 baseball$preHOFEra <- baseball$finalGame < as.Date("1922-01-01")
 #Create a training and testing set
-bb_train <- baseball %>% filter(finalGame < as.Date("1991-01-01"))
-bb_test <- baseball %>% filter(finalGame > as.Date("1991-01-01"))
+# By date
+# bb_train <- baseball %>% filter(finalGame < as.Date("1991-01-01"))
+# bb_test <- baseball %>% filter(finalGame > as.Date("1991-01-01"))
+
+# Random
+baseball_res <- baseball %>% filter(finalGame < as.Date("2004-01-01"))
+indeces = sort(sample(nrow(baseball_res), nrow(baseball_res)*.7))
+bb_train <- baseball_res[indeces,]
+bb_test <- baseball_res[-indeces,]
+
 ```
 
-I've used the era from 1871 through 1990 as my training dataset because it is approximately 80% of the data avaliable. Also, I avoid most players that are still in consideration for the Hall of Fame, so I am unlikely to falsely assume that they won't be inducted becuase they have not yet been. 
+I've used the era from 1871 through 1990 as my training dataset because it is approximately 80% of the data available. Also, I avoid most players that are still in consideration for the Hall of Fame, so I am unlikely to falsely assume that they won't be inducted becuase they have not yet been. 
 
 ```{r Plot 1}
 ggplot(bb_train, aes(rWAR, votedBy)) + geom_boxplot(fill = c("green", "blue", "red", "yellow","green","green","yellow")) + theme_bw() + labs(title = "Box Plots of WAR by path to Hall of Fame", y = "Inducted By", x = "Wins-Above-Replacement (WAR)")
@@ -110,3 +122,128 @@ The logistic regression is a decent predictor of ballot inclusion, but it could 
 # 
 # ggplot(bb_train.HOFEra, aes(rWAR, onBallot, color = bb_train.HOFEra$pred1_cor)) + geom_jitter() + theme_bw() + labs(title = "WAR by Appearance on BBWAA Ballot", x = "WAR", y = "On the BBWAA Ballot", color = "Correctly Predicted?") + stat_function(fun = plot_prob_mod1, color = "red") + scale_color_manual(values = c("green", "red"))
 ```
+
+
+
+
+
+
+## March 19:
+
+```{r ROC Examples}
+library(pROC)
+library(randomForest)
+
+set.seed(420)
+
+num.samples <- 100
+
+weight <- sort(rnorm(n=num.samples, mean = 172, sd= 29))
+
+obese <- ifelse(test = (runif(n=num.samples) < (rank(weight)/100)),yes = 1,no = 0)
+plot(x=weight, y = obese)
+glm.fit <- glm(obese ~ weight, family = binomial)
+lines(weight, glm.fit$fitted.values)
+
+par(pty = "s")
+roc(obese, glm.fit$fitted.values, plot = TRUE, legacy.axes = TRUE, percent = TRUE, xlab = "False Positive Percentage", ylab = "True Positive Percentage", col = "#377eb8", lwd = 4)
+
+roc.info <- roc(obese, glm.fit$fitted.values, legacy.axes = TRUE)
+roc.df <- data.frame(tpp = roc.info$sensitivities*100, fpp = (1 - roc.info$specificities)*100, thresholds = roc.info$thresholds)
+roc.df[roc.df$tpp > 60 & roc.df$tpp < 80,]
+
+rf.model <- randomForest(factor(obese) ~ weight)
+roc(obese, rf.model$votes[,1], percent = TRUE, plot = TRUE)
+```
+
+
+
+
+
+
+Apply ROC Examples
+
+```{r ROC Curves}
+bb_train <- bb_train[order(bb_train$rWAR),]
+plot(x = bb_train$rWAR, y = bb_train$inducted)
+mod2 <- glm(bb_train$inducted ~ bb_train$rWAR, family = binomial)
+lines(bb_train$rWAR, mod2$fitted.values)
+
+get_prob <- function(coefs, input){
+  prob_new <- (exp(sum(coefs * cbind(1, input)))) / (1 + exp(sum(coefs * cbind(1, input))))
+  names(prob_new) <- NULL
+  return(prob_new)
+}
+
+par(pty = "s")
+roc(bb_test$inducted, apply(bb_test[,"rWAR"], 1, get_prob, coefs = mod2$coefficients), plot = TRUE, legacy.axes = TRUE, percent = TRUE, xlab = "False Positive Percentage", ylab = "True Positive Percentage", col = "#377eb8", lwd = 4)
+```
+
+
+Recreating Model
+
+```{r}
+# The model used only position players that were considered by the Hall of Fame panel (not including historical players)
+ml_mod <- baseball %>% filter(!is.na(baseball$firstYearHOF) & position != "P" & baseball$votedBy != "Old Timers" & str_sub(baseball$playerID, -2, -1) != "99")
+ml_mod$debDec <- round(as.numeric(format(ml_mod$debut, "%Y")), -1)
+indeces = sort(sample(nrow(ml_mod), nrow(ml_mod)*.7))
+train <- ml_mod[indeces,]
+test <- ml_mod[-indeces,]
+
+rf.1 <- randomForest(factor(inducted) ~ bats + throws + BB + G.B + goldGloves + MVPs + H + HR + R + RBI + SB + A + PO + E + debDec + firstYearHOF + position + team + allStarApps + OBP + SLG + BA + BAPost + GPost + WSW + WSL + steriods, data = train)
+
+par(pty = "s")
+roc(test$inducted, predict(rf.1, test, type = "prob")[,1], plot = TRUE, legacy.axes = TRUE, percent = TRUE, xlab = "False Positive Percentage", ylab = "True Positive Percentage", col = "#377eb8", lwd = 4)
+```
+
+
+Summary Statistics of HOF Inductees
+
+```{r}
+HOF_batters <- baseball %>% filter(inducted & position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99")
+AB_IQR <- summary(HOF_batters$AB)[5] - summary(HOF_batters$AB)[2]
+low_outliers_AB <- summary(HOF_batters$AB)[2] - 1.5*AB_IQR
+
+batters <- baseball %>% filter(position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & AB >= low_outliers_AB & finalGame < as.Date("2004-01-01"))
+paste0(sum(batters$inducted), " batters, about ", round(sum(batters$inducted)/dim(batters)[1]*100, 0), "% of all qualified batters are HOF inductees")
+
+indeces <- sort(sample(nrow(batters), nrow(batters)*.8))
+bat_train <- batters[indeces,]
+bat_test <- batters[-indeces,]
+
+mod1 <- glm(bat_train$inducted ~ bat_train$rWAR, family = "binomial")
+plot(bat_train$rWAR, bat_train$inducted)
+lines(sort(bat_train$rWAR), sort(mod1$fitted.values))
+ggplot(bat_train, aes(rWAR, inducted)) + geom_jitter() + theme_bw() + geom_line(aes(sort(rWAR), sort(mod1$fitted.values) + 1, color = "red"), size = 2) + labs(title = "Induction to HOF by WAR", x = "WAR", y = "Inducted") + theme(legend.position = "none")
+
+par(pty = "s")
+roc(bat_test$inducted, apply(bat_test[,"rWAR"], 1, get_prob, coefs = mod1$coefficients), plot = TRUE, legacy.axes = TRUE, percent = TRUE, xlab = "False Positive Percentage", ylab = "True Positive Percentage", col = "#377eb8", lwd = 4)
+
+# Early Baseball 1871-1900
+eb_bat_train <- bat_train %>% filter(debut < as.Date("1899-01-01"))
+eb_bat_test <- bat_test %>% filter(debut < as.Date("1899-01-01"))
+mod2.eb <- glm(inducted ~ R, data = eb_bat_train, family = "binomial")
+preds <- rep(0, dim(eb_bat_test)[1])
+for (i in 1:length(preds)) {
+  preds[i] <- get_prob(mod2.eb$coefficients, eb_bat_test[i, c("R")])
+}
+par(pty = "s")
+roc(eb_bat_test$inducted, preds, plot = TRUE, legacy.axes = TRUE, percent = TRUE, xlab = "False Positive Percentage", ylab = "True Positive Percentage", col = "#377eb8", lwd = 4)
+summary(mod2.eb)
+
+# Deadball Era 1901-1919
+db_bat_train <- bat_train %>% filter(debut > as.Date("1899-01-01") & debut < as.Date("1917-01-01"))
+db_bat_test <- bat_test %>% filter(debut < as.Date("1899-01-01") & debut < as.Date("1917-01-01"))
+mod2.db <- glm(inducted ~ G.B, data = db_bat_train, family = "binomial")
+summary(mod2.db)
+preds <- rep(0, dim(db_bat_test)[1])
+for (i in 1:length(preds)) {
+  preds[i] <- get_prob(mod2.db$coefficients, eb_bat_test[i, c("G.B")])
+}
+par(pty = "s")
+roc(db_bat_test$inducted, preds, plot = TRUE, legacy.axes = TRUE, percent = TRUE, xlab = "False Positive Percentage", ylab = "True Positive Percentage", col = "#377eb8", lwd = 4)
+
+
+# BB + G.B + goldGloves + MVPs + H + HR + R + RBI + SB + A + PO + E + OBP + SLG + BA + BAPost + GPost + WSW + WSL + steriods, data = db_bat_train
+```
+
