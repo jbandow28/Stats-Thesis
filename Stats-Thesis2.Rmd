@@ -63,7 +63,7 @@ WAR seems to generally be a good indicator of Hall of Fame status, but there is 
 ggplot(bb_train, aes(rWAR, onBallot, color = preHOFEra)) + geom_jitter() + theme_bw() + labs(title = "WAR by Appearance on BBWAA Ballot", x = "WAR", y = "On the BBWAA Ballot", color = "Retired Before 1922") + scale_color_manual(values = c("blue", "red"))
 ```
 
-The blue points represent players that retired before the 1922 season. These players would be ineligible for the first HOF ballot in 1936 under today's standards. Some players from this era were considered, as the rules were not solidifed until much later. However, the Old Timers committee was created to address the issue of underrepresentation amoung the older era, so that would explain why the majority of the higher outliers for WAR that were not included on any BBWAA ballot are from this older era. 
+The blue points represent players that retired before the 1922 season. These players would be ineligible for the first HOF ballot in 1936 under today's standards. Some players from this era were considered, as the rules were not solidifed until much later. However, the Old Timers committee was created to address the issue of underrepresentation among the older era, so that would explain why the majority of the higher outliers for WAR that were not included on any BBWAA ballot are from this older era. 
 
 ```{r Plot 4}
 bb_train.HOFEra <- bb_train %>% filter(!preHOFEra)
