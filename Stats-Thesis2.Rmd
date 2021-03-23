@@ -19,7 +19,7 @@ baseball <- fread("baseball.csv")
 ```
 
 ```{r Organize Data}
-
+baseball$careerLength <- as.numeric(as.Date(baseball$finalGame) - as.Date(baseball$debut)) / 365.25
 ```
 
 ```{r Edit data}
@@ -200,11 +200,17 @@ roc(test$inducted, predict(rf.1, test, type = "prob")[,1], plot = TRUE, legacy.a
 Summary Statistics of HOF Inductees
 
 ```{r}
-HOF_batters <- baseball %>% filter(inducted & position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99")
-AB_IQR <- summary(HOF_batters$AB)[5] - summary(HOF_batters$AB)[2]
-low_outliers_AB <- summary(HOF_batters$AB)[2] - 1.5*AB_IQR
+low_out <- function(col){
+  stats <- summary(col)
+  iqr <- stats[5] - stats[2]
+  res <- stats[2] - 1.5*iqr
+  names(res) <- NULL
+  return(res)
+}
 
-batters <- baseball %>% filter(position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & AB >= low_outliers_AB & finalGame < as.Date("2004-01-01"))
+HOF_batters <- baseball %>% filter(inducted & position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99")
+
+batters <- baseball %>% filter(position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & AB >= low_out(HOF_batters$AB) & finalGame < as.Date("2004-01-01") & careerLength >= low_out(HOF_batters$careerLength) & rWAR >= low_out(HOF_batters$rWAR) & H >= low_out(HOF_batters$H) & R >= low_out(HOF_batters$R) & RBI >= low_out(HOF_batters$RBI) & G.B >= low_out(HOF_batters$G.B) & BA >= low_out(HOF_batters$BA) & OBP >= low_out(HOF_batters$OBP) & SLG >= low_out(HOF_batters$SLG))
 paste0(sum(batters$inducted), " batters, about ", round(sum(batters$inducted)/dim(batters)[1]*100, 0), "% of all qualified batters are HOF inductees")
 
 indeces <- sort(sample(nrow(batters), nrow(batters)*.8))
@@ -245,5 +251,7 @@ roc(db_bat_test$inducted, preds, plot = TRUE, legacy.axes = TRUE, percent = TRUE
 
 
 # BB + G.B + goldGloves + MVPs + H + HR + R + RBI + SB + A + PO + E + OBP + SLG + BA + BAPost + GPost + WSW + WSL + steriods, data = db_bat_train
+
+
 ```
 

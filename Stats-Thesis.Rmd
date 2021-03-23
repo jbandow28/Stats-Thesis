@@ -313,7 +313,7 @@ for(i in unique(Appearances$playerID)) {
       most_games <- curr_games
     }
   }
-  apps <- rbind(apps, data.frame(playerID = i, team = j, P = sum(temp$G_p), C = sum(temp$G_c), X1B = sum(temp$G_1b), X2B = sum(temp$G_2b), X3B = sum(temp$G_3b), SS = sum(temp$G_ss), LF = sum(temp$G_lf), CF = sum(temp$G_cf), RF = sum(temp$G_rf), DH = sum(temp$G_dh), PH = sum(temp$G_ph), PR = sum(temp$G_pr)))
+  apps <- rbind(apps, data.frame(playerID = i, team = most_team, P = sum(temp$G_p), C = sum(temp$G_c), X1B = sum(temp$G_1b), X2B = sum(temp$G_2b), X3B = sum(temp$G_3b), SS = sum(temp$G_ss), LF = sum(temp$G_lf), CF = sum(temp$G_cf), RF = sum(temp$G_rf), DH = sum(temp$G_dh), PH = sum(temp$G_ph), PR = sum(temp$G_pr)))
 }
 
 

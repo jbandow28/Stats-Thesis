@@ -1,0 +1,20 @@
+---
+title: "Final Report"
+author: "Jackson Bandow"
+date: "3/23/2021"
+output: html_document
+---
+
+```{r Libraries}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(data.table)
+library(Lahman)
+library(stringr)
+```
+
+```{r Import data}
+baseball <- fread("baseball.csv")
+```
+

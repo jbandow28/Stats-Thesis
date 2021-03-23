@@ -4,7 +4,7 @@ Deliverables for 3/26:
 * Organize code into scratch work/final code
 * Balance positives/negatives better
 * Look into improving modeling (nonparametrics?)
-* Start to creat outline for paper
+* Start to create outline for paper
 
 Deliverables for 3/19:
 * Add ROC curves to analysis
