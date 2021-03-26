@@ -20,6 +20,8 @@ baseball <- fread("baseball.csv")
 
 ```{r Organize Data}
 baseball$careerLength <- as.numeric(as.Date(baseball$finalGame) - as.Date(baseball$debut)) / 365.25
+baseball$retireDecade <- round(as.numeric(format(baseball$finalGame, "%Y")), -1)
+baseball$debutDecade <- round(as.numeric(format(baseball$debut, "%Y")), -1)
 ```
 
 ```{r Edit data}
@@ -208,11 +210,34 @@ low_out <- function(col){
   return(res)
 }
 
-HOF_batters <- baseball %>% filter(inducted & position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99")
+HOF_batters <- baseball %>% filter(inducted & position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & finalGame < as.Date("2004-01-01") & finalGame > as.Date("1924-01-01"))
 
-batters <- baseball %>% filter(position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & AB >= low_out(HOF_batters$AB) & finalGame < as.Date("2004-01-01") & careerLength >= low_out(HOF_batters$careerLength) & rWAR >= low_out(HOF_batters$rWAR) & H >= low_out(HOF_batters$H) & R >= low_out(HOF_batters$R) & RBI >= low_out(HOF_batters$RBI) & G.B >= low_out(HOF_batters$G.B) & BA >= low_out(HOF_batters$BA) & OBP >= low_out(HOF_batters$OBP) & SLG >= low_out(HOF_batters$SLG))
+ggplot(HOF_batters, aes(finalGame, BA)) + geom_point() + theme_bw()
+
+batters <- baseball %>% filter(position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & finalGame < as.Date("2004-01-01") & finalGame > as.Date("1924-01-01"))
+batters$retireRank <- floor((as.numeric(format(batters$finalGame, "%Y")) - 4) / 10) - 191
+batters$FP <- (batters$PO + batters$A) / (batters$PO + batters$A + batters$E) 
+
 paste0(sum(batters$inducted), " batters, about ", round(sum(batters$inducted)/dim(batters)[1]*100, 0), "% of all qualified batters are HOF inductees")
 
+mod1 <- glm(data = batters, formula = inducted ~ BB + G.B + goldGloves + MVPs + H + HR + R + RBI + SB + A + PO + E + OBP + SLG + BA + BAPost + GPost + WSW + WSL + steriods, family = "binomial")
+
+get_prob <- function(input, coefs){
+  inp <- t(as.matrix(cbind(rep(1, dim(input)[1]),input)))
+  cf <- t(as.matrix(coefs))
+  prob_new <- (exp(cf %*% inp)) / (1 + exp(cf %*% inp))
+  names(prob_new) <- NULL
+  return(as.vector(prob_new))
+}
+
+mc_rate <- function(probs, actual) {
+  mean(round(probs, 0) != actual)
+}
+
+mc_rate(get_prob(batters[,c("BB", "G.B", "goldGloves", "MVPs", "H", "HR", "R", "RBI", "SB", "A", "PO", "E", "OBP", "SLG", "BA", "BAPost", "GPost", "WSW", "WSL", "steriods")], mod1$coefficients), batters$inducted)
+```
+
+```{r}
 indeces <- sort(sample(nrow(batters), nrow(batters)*.8))
 bat_train <- batters[indeces,]
 bat_test <- batters[-indeces,]
@@ -253,5 +278,95 @@ roc(db_bat_test$inducted, preds, plot = TRUE, legacy.axes = TRUE, percent = TRUE
 # BB + G.B + goldGloves + MVPs + H + HR + R + RBI + SB + A + PO + E + OBP + SLG + BA + BAPost + GPost + WSW + WSL + steriods, data = db_bat_train
 
 
+```
+
+```{r}
+# Model 1: WAR
+mod1 <- glm(data = batters, formula = inducted ~ rWAR, family = "binomial")
+
+mc_rate(get_prob(batters[,c("rWAR")], mod1$coefficients), batters$inducted)
+
+# Model 2: Standard Statistics
+mod2 <- glm(data = batters, formula = inducted ~ BB + G.B + H + HR + R + RBI + SB + A + PO + E + OBP + SLG + BA, family = "binomial")
+
+mc_rate(get_prob(batters[,c("BB", "G.B", "H", "HR", "R", "RBI", "SB", "A", "PO", "E", "OBP", "SLG", "BA")], mod2$coefficients), batters$inducted)
+
+# Model 3: WAR with Debut Decade interaction
+mod3 <- glm(data = batters, formula = inducted ~ debutDecade*rWAR, family = "binomial")
+
+temp <- cbind(batters[,c("debutDecade", "rWAR")], batters$debutDecade*batters$rWAR)
+mc_rate(get_prob(temp, mod3$coefficients), batters$inducted)
+
+# Model 4: Standard Statistics with Yearly Interactions
+mod4 <- glm(data = batters, formula = inducted ~ debutDecade*BB + debutDecade*G.B + debutDecade*H + debutDecade*HR + debutDecade*R + debutDecade*RBI + debutDecade*SB + debutDecade*A + debutDecade*PO + debutDecade*E + debutDecade*OBP + debutDecade*SLG + debutDecade*BA, family = "binomial")
+
+temp <- cbind(batters[,c("debutDecade", "BB", "G.B", "H", "HR", "R", "RBI", "SB", "A", "PO", "E", "OBP", "SLG", "BA")], batters[,c("BB", "G.B", "H", "HR", "R", "RBI", "SB", "A", "PO", "E", "OBP", "SLG", "BA")]*batters$debutDecade)
+mc_rate(get_prob(temp, mod4$coefficients), batters$inducted)
+
+ggplot(sl_batters, aes(retireRank, HR, color = inducted)) + geom_point() + theme_bw()
+ggplot(batters, aes(retireDecade, log(H), color = inducted)) + geom_point() + theme_bw()
+ggplot(batters, aes(retireDecade, log(RBI), color = inducted)) + geom_point() + theme_bw()
+ggplot(batters, aes(retireDecade, log(BB), color = inducted)) + geom_point() + theme_bw()
+ggplot(batters, aes(retireDecade, log(SB), color = inducted)) + geom_point() + theme_bw()
+ggplot(batters, aes(retireDecade, log(R), color = inducted)) + geom_point() + theme_bw()
+```
+
+```{r}
+library(car)
+apply(batters[,c("PO", "A", "E", "rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "OBP", "SLG")], 2, qqPlot)
+apply(log(batters[,c("FP", "rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "OBP", "SLG")]), 2, qqPlot)
+
+log_batters <- batters %>% select(rWAR, AB, H, HR, BB, G.B, BA, R, RBI, SB, OBP, SLG, FP) %>% log() %>% cbind(batters[,c("inducted", "steriods")])
+
+# Logged Model 1: WAR
+mod1l <- glm(data = log_batters, formula = inducted ~ rWAR, family = "binomial")
+mc_rate(get_prob(log_batters[,c("rWAR", "steriods")], mod1l$coefficients), log_batters$inducted)
+
+# Logged Model 2: Standard Statistics
+mod2l <- glm(data = log_batters, formula = inducted ~ BB + G.B + H + HR + R + RBI + SB + FP + OBP + SLG + BA, family = "binomial")
+mc_rate(get_prob(log_batters[,c("BB", "G.B", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG", "BA")], mod2l$coefficients), log_batters$inducted)
+```
+
+```{r}
+standardize <- function(col) {
+  return((col - mean(col)) / sd(col))
+}
+
+s_batters <- log_batters %>% cbind(batters[,"retireRank"])
+for (i in sort(unique(s_batters$retireRank))) {
+  s_batters[s_batters$retireRank == i,c("rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "SB", "OBP", "SLG", "FP")] <- data.frame(apply(s_batters[s_batters$retireRank == i,c("rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "SB", "OBP", "SLG", "FP")], 2, standardize))
+}
+
+# Time-Standardized Model 1: WAR
+mod1s <- glm(data = s_batters, formula = inducted ~ rWAR, family = "binomial")
+mc_rate(get_prob(s_batters[,c("rWAR")], mod1s$coefficients), s_batters$inducted)
+
+# Time_Standardized Model 2: Standard Statistics
+mod2s <- glm(data = s_batters, formula = inducted ~ BB + G.B + H + HR + R + RBI + SB + FP + OBP + SLG + BA, family = "binomial")
+mc_rate(get_prob(s_batters[,c("BB", "G.B", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG", "BA")], mod2s$coefficients), s_batters$inducted)
+
+ggplot(s_batters, aes(retireRank, HR)) + geom_point(aes(color = inducted)) + theme_bw()
+```
+
+
+```{r}
+HOF_batters <- baseball %>% filter(inducted & position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & finalGame < as.Date("2004-01-01") & finalGame > as.Date("1924-01-01"))
+
+batters <- baseball %>% filter(position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & finalGame < as.Date("2004-01-01") & finalGame > as.Date("1924-01-01"))
+batters$retireRank <- floor((as.numeric(format(batters$finalGame, "%Y")) - 4) / 10) - 191
+batters$FP <- (batters$PO + batters$A) / (batters$PO + batters$A + batters$E) 
+
+ggplot(batters, aes(retireRank, AB, color = inducted)) + geom_jitter() + theme_bw() + scale_color_manual(values = c("yellow", "green")) + labs(title = "Number of At-Bats by Retirement Decade", x = "Retirement Decade", y = "ABs", color = "Inducted to HOF?")
+
+
+for (i in sort(unique(batters$retireRank))) {
+  temp <- batters %>% filter(retireRank == i)
+  AB_lim <- temp$AB >= min(temp[temp$inducted,]$AB)
+  print(paste0("Decade ", i, ": min AB rank is ", sum(AB_lim), "; percentile is ", mean(!AB_lim), "; total batters is ", dim(temp)[1], "; "))
+}
+
+apply(new_batters[,c("FP", "rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "OBP", "SLG")], 2, qqPlot)
+apply(log(new_batters[,c("FP", "rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "OBP", "SLG")]), 2, qqPlot)
+library(car)
 ```
 
