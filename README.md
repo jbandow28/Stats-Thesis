@@ -1,5 +1,33 @@
 # Timeline 
 
+Deliverables for 5/13:
+* Thesis Due
+* Poster Due
+
+Deliverables for 5/7:
+* Revise paper
+
+Deliverables for 4/30:
+* Finish any incomplete pages
+* Turn in first draft
+
+Deliverables for 4/23:
+* Apply model to future generations / make predictions
+* Draft corresponding pages
+
+Deliverables for 4/16:
+* Apply model to pitchers and make necessary tweaks
+* Draft pages to incorporate into paper
+
+Deliverables for 4/9:
+* Continue to work on model improvements
+* Write a few pages to catch up with analysis
+
+Deliverables for 4/2:
+* Organize remainder of workload for paper
+* Dive deeper into errors of the initial models
+* Consolidate prior work into presentable format
+
 Deliverables for 3/26:
 * Organize code into scratch work/final code
 * Balance positives/negatives better

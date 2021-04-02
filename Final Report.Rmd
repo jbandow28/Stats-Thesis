@@ -111,7 +111,7 @@ for (i in 1:length(sets)) {
 # print(paste0("Model 3 -- Misclassification Rate: ", round(mean(mcr7)*100, 1), "%; Area Under the Curve: ", round(mean(auc7), 3)))
 
 # Standardize data by retirement decade
-snew_batters <- new_batters %>% select(rWAR, AB, H, HR, BB, G.B, BA, R, RBI, SB, OBP, SLG, FP) %>% log() %>% cbind(new_batters[,c("inducted", "steriods", "retireRank")])
+snew_batters <- new_batters %>% select(rWAR, AB, H, HR, BB, G.B, BA, R, RBI, SB, OBP, SLG, FP) %>% log() %>% cbind(new_batters[,c("inducted", "steriods", "retireRank", "name", "career_len", "banned", "MVPs", "goldGloves", "BRaward", "CBPoY", "HAaward", "hutch", "LGMaward", "RCaward", "RoY", "SS", "TC", "allStarApps", "position", "def_pos", "winPer", "vets_comm")])
 for (i in sort(unique(snew_batters$retireRank))) {
   snew_batters[snew_batters$retireRank == i,c("rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "SB", "OBP", "SLG", "FP")] <- data.frame(apply(snew_batters[snew_batters$retireRank == i,c("rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "SB", "OBP", "SLG", "FP")], 2, standardize))
 }
@@ -181,33 +181,48 @@ for (i in 1:length(sets)) {
 
 # Present Results in table
 logisticModelRes <- data.frame(model = c("Model 1", "Model 2", "Model 3", "Standardized Model 1", "Standardized Model 2", "Standardized Model 3", "Standardized Model 1 with Era Interactions", "Standardized Model 2 with Era Interactions", "Standardized Model 3 with Era Interactions"), mc_rate = c(mean(mcr1), mean(mcr2), mean(mcr7), mean(mcr3), mean(mcr4), mean(mcr8), mean(mcr5), mean(mcr6), mean(mcr9)), auc = c(mean(auc1), mean(auc2), mean(auc7), mean(auc3), mean(auc4), mean(auc8), mean(auc5), mean(auc6), mean(auc9)))
-colnames(logisticModelRes) <- c("Mdoel", "Misclass Rate", "AUC")
+colnames(logisticModelRes) <- c("Model", "Misclass Rate", "AUC")
 gt(logisticModelRes) %>% tab_header(title = "Initial Logistic Modeling Results") %>% fmt_percent(columns = vars("Misclass Rate"), decimals = 1) %>% fmt_number(columns = vars("AUC"), decimals = 3)
+
+#ggplot(new_batters, aes(retireRank, standardize(log(rWAR)), color = inducted)) + geom_point() + theme_bw()
+
 ```
 
-```{r Random Forest}
-library(randomForest)
-# Model 1: WAR 
-mcr1 <- NULL
-auc1 <- NULL
-for (i in 1:length(sets)) {
-  mod <- randomForest(factor(inducted) ~ rWAR + retireRank, data = new_batters[!sets[[i]],])
-  mcr1 <- c(mcr1, mc_rate(predict(mod, new_batters[sets[[i]],c("rWAR", "retireRank")], type = "prob")[,2], new_batters[sets[[i]],]$inducted))
-  auc1 <- c(auc1, roc(new_batters[sets[[i]],]$inducted, predict(mod, new_batters[sets[[i]],c("rWAR", "retireRank")], type = "prob")[,1])$auc)
+```{r Improving the Model}
+ntrials <- 100
+res1 <- NULL
+res2 <- NULL
+for (i in 1:ntrials) {
+  # Make k-fold indeces 
+  rand_ind <- sample(1:dim(new_batters)[1], dim(new_batters)[1], replace = FALSE)
+  sets <- NULL
+  fold_size <- dim(new_batters)[1] / 5
+  for (i in 1:5) {
+    sets <- append(sets, list(rand_ind[((i-1)*fold_size + 1):(i*fold_size)]))
+  }
+  
+  # Original Model
+  obs <- rep(NA, dim(snew_batters)[1])
+  for (i in 1:length(sets)) {
+    mod <- glm(data = snew_batters[!sets[[i]],], formula = inducted ~ retireRank*rWAR, family = "binomial")
+    temp <- cbind(snew_batters[sets[[i]],c("retireRank", "rWAR")], snew_batters[sets[[i]],]$retireRank*snew_batters[sets[[i]],]$rWAR)
+    obs[sets[[i]]] <- round(get_prob(temp, mod$coefficients), 0) == snew_batters[sets[[i]],]$inducted
+  }
+  res1 <- rbind(res1, obs)
+  
+  # New Model
+  obs <- rep(NA, dim(snew_batters)[1])
+  for (i in 1:length(sets)) {
+    mod <- glm(data = snew_batters[!sets[[i]],], formula = inducted ~ retireRank*rWAR + career_len + MVPs + SS + TC + RBI + winPer + vets_comm + def_pos, family = "binomial")
+    temp <- cbind(snew_batters[sets[[i]],c("retireRank", "rWAR", "career_len", "MVPs", "SS", "TC", "RBI", "winPer", "vets_comm")], snew_batters[sets[[i]],]$def_pos == "2B", snew_batters[sets[[i]],]$def_pos == "3B", snew_batters[sets[[i]],]$def_pos == "C", snew_batters[sets[[i]],]$def_pos == "CF", snew_batters[sets[[i]],]$def_pos == "LF", snew_batters[sets[[i]],]$def_pos == "RF", snew_batters[sets[[i]],]$def_pos == "SS", snew_batters[sets[[i]],]$retireRank * snew_batters[sets[[i]],]$rWAR)
+    obs[sets[[i]]] <- round(get_prob(temp, mod$coefficients), 0) == snew_batters[sets[[i]],]$inducted
+  }
+  res2 <- rbind(res2, obs)
 }
-print(paste0("Random Forest 1 -- Misclassification Rate: ", round(mean(mcr1)*100, 1), "%; Area Under the Curve: ", round(mean(auc1), 3)))
+snew_batters$mod1_accuracy <- apply(res1, 2, mean)
+snew_batters$mod2_accuracy <- apply(res2, 2, mean)
 
-# Model 2: Standard Statistics
-mcr2 <- NULL
-auc2 <- NULL
-for (i in 1:length(sets)) {
-  mod <- randomForest(factor(inducted) ~ retireRank + G.B + AB + BB + H + HR + R + RBI + SB + FP + OBP + SLG + BA, data = new_batters[!sets[[i]],])
-  mcr2 <- c(mcr2, mc_rate(predict(mod, new_batters[sets[[i]],c("retireRank", "G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG", "BA")], type = "prob")[,2], new_batters[sets[[i]],]$inducted))
-  auc2 <- c(auc2, roc(new_batters[sets[[i]],]$inducted, predict(mod, new_batters[sets[[i]],c("retireRank", "G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG", "BA")], type = "prob")[,1])$auc)
-}
-print(paste0("Random Forest 2 -- Misclassification Rate: ", round(mean(mcr2)*100, 1), "%; Area Under the Curve: ", round(mean(auc2), 3)))
+g <- ggplot(snew_batters, aes(rWAR, inducted, color = mod2_accuracy, text = name)) + geom_jitter() + theme_bw()
+ggplotly(g)
 ```
-
-
-
 
