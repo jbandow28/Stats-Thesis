@@ -1,11 +1,12 @@
 ---
-title: "Final Report"
+title: "Final-Report"
 author: "Jackson Bandow"
 date: "3/23/2021"
-output: html_document
+output:
+  pdf_document: default
 ---
 
-```{r Libraries}
+```{r Libraries, echo=FALSE, message=FALSE}
 library(dplyr)
 library(ggplot2)
 library(plotly)
@@ -15,9 +16,10 @@ library(stringr)
 library(car)
 library(pROC)
 library(gt)
+library(tinytex)
 ```
 
-```{r Functions} 
+```{r Functions, echo=FALSE} 
 get_prob <- function(input, coefs){
   inp <- t(as.matrix(cbind(rep(1, dim(input)[1]),input)))
   cf <- t(as.matrix(coefs))
@@ -43,7 +45,7 @@ standardize <- function(col) {
 }
 ```
 
-```{r Data}
+```{r Data, echo=FALSE}
 baseball <- fread("baseball.csv")
 baseball$careerLength <- as.numeric(as.Date(baseball$finalGame) - as.Date(baseball$debut)) / 365.25
 baseball$debutDecade <- round(as.numeric(format(baseball$debut, "%Y")), -1)
@@ -56,8 +58,11 @@ batters <- baseball %>% filter(position != "P" & votedBy != "Negro League" & str
 ```
 
 ```{r Exploration of Variables}
-ggplot(batters, aes(retireRank, AB, color = inducted)) + geom_jitter() + theme_bw() + scale_color_manual(values = c("yellow", "green")) + labs(title = "Number of At-Bats by Retirement Decade", x = "Retirement Decade", y = "ABs", color = "Inducted to HOF?")
-paste0("Composition of HOF batters in data: ", round(mean(batters$inducted)*100, 1), "%.")
+ggplot(batters, aes(retireRank, AB, color = inducted)) + geom_jitter() + theme_bw() + 
+  scale_color_manual(values = c("yellow", "green")) + 
+  labs(title = "Number of At-Bats by Retirement Decade", x = "Retirement Decade", 
+       y = "ABs", color = "Inducted to HOF?")
+print(paste0("Composition of HOF batters in data: ", round(mean(batters$inducted)*100, 1), "%."))
 
 # Limit data by ABs by retirement decade
 new_batters <- data.frame()
@@ -67,11 +72,14 @@ for (i in unique(batters$retireRank)) {
   new_batters <- rbind(new_batters, temp[order(temp$AB)[(dim(temp)[1]-59):dim(temp)[1]],])
 }
 
-ggplot(new_batters, aes(finalGame, AB, color = inducted)) + geom_jitter() + theme_bw() + scale_color_manual(values = c("yellow", "green")) + labs(title = "Number of At-Bats by Retirement Decade", x = "Retirement Decade", y = "ABs", color = "Inducted to HOF?")
-paste0("Composition of HOF batters in data: ", round(mean(new_batters$inducted)*100, 1), "%.")
+ggplot(new_batters, aes(finalGame, AB, color = inducted)) + geom_jitter() + theme_bw() + 
+  scale_color_manual(values = c("yellow", "green")) + 
+  labs(title = "Number of At-Bats by Retirement Decade", x = "Retirement Decade", 
+       y = "ABs", color = "Inducted to HOF?")
+print(paste0("Composition of HOF batters in data: ", round(mean(new_batters$inducted)*100, 1), "%."))
 ```
 
-```{r Logistic Models} 
+```{r Logistic Models, warning=FALSE} 
 # Make k-fold indeces 
 rand_ind <- sample(1:dim(new_batters)[1], dim(new_batters)[1], replace = FALSE)
 sets <- NULL
@@ -182,13 +190,12 @@ for (i in 1:length(sets)) {
 # Present Results in table
 logisticModelRes <- data.frame(model = c("Model 1", "Model 2", "Model 3", "Standardized Model 1", "Standardized Model 2", "Standardized Model 3", "Standardized Model 1 with Era Interactions", "Standardized Model 2 with Era Interactions", "Standardized Model 3 with Era Interactions"), mc_rate = c(mean(mcr1), mean(mcr2), mean(mcr7), mean(mcr3), mean(mcr4), mean(mcr8), mean(mcr5), mean(mcr6), mean(mcr9)), auc = c(mean(auc1), mean(auc2), mean(auc7), mean(auc3), mean(auc4), mean(auc8), mean(auc5), mean(auc6), mean(auc9)))
 colnames(logisticModelRes) <- c("Model", "Misclass Rate", "AUC")
-gt(logisticModelRes) %>% tab_header(title = "Initial Logistic Modeling Results") %>% fmt_percent(columns = vars("Misclass Rate"), decimals = 1) %>% fmt_number(columns = vars("AUC"), decimals = 3)
+gt(logisticModelRes) %>% tab_header(title = "Initial Logistic Modeling Results", subtitle = md("&nbsp;")) %>% fmt_percent(columns = vars("Misclass Rate"), decimals = 1) %>% fmt_number(columns = vars("AUC"), decimals = 3)
 
 #ggplot(new_batters, aes(retireRank, standardize(log(rWAR)), color = inducted)) + geom_point() + theme_bw()
-
 ```
 
-```{r Improving the Model}
+```{r Improving the Model, warning=FALSE}
 ntrials <- 100
 res1 <- NULL
 res2 <- NULL
@@ -222,7 +229,6 @@ for (i in 1:ntrials) {
 snew_batters$mod1_accuracy <- apply(res1, 2, mean)
 snew_batters$mod2_accuracy <- apply(res2, 2, mean)
 
-g <- ggplot(snew_batters, aes(rWAR, inducted, color = mod2_accuracy, text = name)) + geom_jitter() + theme_bw()
-ggplotly(g)
+ggplot(snew_batters, aes(rWAR, inducted, color = mod2_accuracy, text = name)) + geom_jitter() + theme_bw()
 ```
 
