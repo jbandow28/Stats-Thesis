@@ -301,7 +301,10 @@ fwrite(Fielding2, "positions.csv")
 
 ```{r Position/Team}
 data("Appearances")
+data("Teams")
 
+Appearances <- left_join(Appearances, Teams, by = c("teamID", "yearID")) 
+Appearances$wPer <- Appearances$W / Appearances$G 
 apps <- data.frame()
 for(i in unique(Appearances$playerID)) {
   temp <- Appearances %>% filter(playerID == i)
@@ -313,7 +316,7 @@ for(i in unique(Appearances$playerID)) {
       most_games <- curr_games
     }
   }
-  apps <- rbind(apps, data.frame(playerID = i, team = most_team, P = sum(temp$G_p), C = sum(temp$G_c), X1B = sum(temp$G_1b), X2B = sum(temp$G_2b), X3B = sum(temp$G_3b), SS = sum(temp$G_ss), LF = sum(temp$G_lf), CF = sum(temp$G_cf), RF = sum(temp$G_rf), DH = sum(temp$G_dh), PH = sum(temp$G_ph), PR = sum(temp$G_pr)))
+  apps <- rbind(apps, data.frame(playerID = i, career_len = length(unique(temp$yearID)), team = most_team, wPer = sum((temp$G_all*temp$wPer)/sum(temp$G_all)), P = sum(temp$G_p), C = sum(temp$G_c), X1B = sum(temp$G_1b), X2B = sum(temp$G_2b), X3B = sum(temp$G_3b), SS = sum(temp$G_ss), LF = sum(temp$G_lf), CF = sum(temp$G_cf), RF = sum(temp$G_rf), DH = sum(temp$G_dh), PH = sum(temp$G_ph), PR = sum(temp$G_pr)))
 }
 
 
@@ -321,25 +324,26 @@ apps[is.na(apps$DH),"DH"] <- 0
 apps[is.na(apps$PH),"PH"] <- 0
 apps[is.na(apps$PR),"PR"] <- 0
 pos <- c("P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "PH", "PR")
-apps$position <- pos[apply(apps[,c(3:14)], 1, order)[12,]]
+pos_d <- c("P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF")
+apps$position <- pos[apply(apps[,c(5:16)], 1, order)[12,]]
+apps$pos_d <- pos_d[apply(apps[,c(5:13)], 1, order)[9,]]
 
 apps$pitchPer <- apps$P / (apps$P + apps$C + apps$X1B + apps$X2B + apps$X3B + apps$SS + apps$RF + apps$CF + apps$LF + apps$DH + apps$PH + apps$PR)
 apps$batPer <- (apps$C + apps$X1B + apps$X2B + apps$X3B + apps$SS + apps$RF + apps$CF + apps$LF + apps$DH + apps$PH) / (apps$P + apps$C + apps$X1B + apps$X2B + apps$X3B + apps$SS + apps$RF + apps$CF + apps$LF + apps$DH + apps$PH + apps$PR)
 
-apps <- apps %>% select(playerID, team, position, pitchPer, batPer)
+apps <- apps %>% select(playerID, career_len, team, position, pos_d, wPer, pitchPer, batPer)
 fwrite(apps, "apps.csv")
 ```
 
 ```{r Player Awards}
 data("AwardsPlayers")
 
-# Need: Gold Gloves, MVP Awards
-awards <- AwardsPlayers %>% filter(awardID == "Gold Glove" | awardID == "Most Valuable Player")
 awards2 <- data.frame()
-for (i in unique(awards$playerID)) {
-  temp <- awards %>% filter(playerID == i)
-  awards2 <- rbind(awards2, data.frame(playerID = i, goldGloves = sum(temp$awardID == "Gold Glove"), MVPs = sum(temp$awardID == "Most Valuable Player")))
+for (i in unique(AwardsPlayers$playerID)) {
+  temp <- AwardsPlayers %>% filter(playerID == i)
+  awards2 <- rbind(awards2, data.frame(playerID = i, goldGloves = sum(temp$awardID == "Gold Glove"), MVPs = sum(temp$awardID == "Most Valuable Player"), CYaward = sum(temp$awardID == "Cy Young Award"), BRaward = sum(temp$awardID == "Branch Rickey Award"), CBPoY = sum(temp$awardID == "Comeback Player of the Year"), HAaward = sum(temp$awardID == "Hank Aaron Award"), hutch = sum(temp$awardID == "Hutch Award"), LGMaward = sum(temp$awardID == "Lou Gehrig Memorial Award"), PTC = sum(temp$awardID == "Pitching Triple Crown"), ReloY = sum(temp$awardID == "Reliever of the Year Award"), RCaward = sum(temp$awardID == "Roberto Clemente Award"), RRMaward = sum(temp$awardID == "Rolaids Relief Man Award"), RoY = sum(temp$awardID == "Rookie of the Year"), SS = sum(temp$awardID == "Silver Slugger"), TC = sum(temp$awardID == "Triple Crown")))
 }
+
 fwrite(awards2, "awards.csv")
 ```
 
@@ -406,6 +410,19 @@ Master2 <- left_join(Master2, awards, by = "playerID", all = TRUE)
 Master2 <- left_join(Master2, allstars, by = "playerID",  all = TRUE)
 Master2 <- left_join(Master2, apps, by = "playerID", all = TRUE)
 Master2 <- left_join(Master2, batPost, by = "playerID", all = TRUE)
+Master2[is.na(Master2$CYaward), "CYaward"] <- 0
+Master2[is.na(Master2$BRaward), "BRaward"] <- 0
+Master2[is.na(Master2$CBPoY), "CBPoY"] <- 0
+Master2[is.na(Master2$HAaward), "HAaward"] <- 0
+Master2[is.na(Master2$hutch), "hutch"] <- 0
+Master2[is.na(Master2$LGMaward), "LGMaward"] <- 0
+Master2[is.na(Master2$PTC), "PTC"] <- 0
+Master2[is.na(Master2$ReloY), "ReloY"] <- 0
+Master2[is.na(Master2$RCaward), "RCaward"] <- 0
+Master2[is.na(Master2$RRMaward), "RRMaward"] <- 0
+Master2[is.na(Master2$RoY), "RoY"] <- 0
+Master2[is.na(Master2$SS), "SS"] <- 0
+Master2[is.na(Master2$TC), "TC"] <- 0
 Master2[is.na(Master2$GPost), "GPost"] <- 0
 Master2[is.na(Master2$BAPost), "BAPost"] <- 0
 Master2[is.na(Master2$WSW), "WSW"] <- 0
@@ -421,17 +438,21 @@ Master2[Master2$votedBy == "" & !is.na(Master2$votedBy), "votedBy"] <- NA
 
 banned_players <- c("bechtge01", "devliji01", "hallge01", "nichoal01", "cravebi01", "highadi01", "o'conja01", "howelha01", "fogelho99", "chaseha01", "zimmehe01", "cicoted01", "willile01", "gandich01", "mcmulfr01", "risbesw01", "felscha01", "jacksjo01", "weavebu01", "gedeojo01", "paulege01", "kauffbe01", "mageele01", "douglph01", "o'conji01", "dolanco02", "rosepe01")
 
-mitchell_report <- c("caminke01", "cansejo01", "dykstle01", "joynewa01", "mcgwima01", "turnbde01", "alexama02", "bonesri01", "cabreal02", "crawfpa02", "gonzaju03", "grimsja01", "palmera01", "benarma01", "bondsba01", "estalbo02", "giambja01", "giambje01", "riosar01", "santibe01", "sheffga01", "velarra01", "allench01", "bellmi02", "bennega01", "bigbila01", "brownke01", "carrema01", "chrisja01", "clarkho02", "clemero02", "custja01", "donnebr01", "donnech01", "francma01", "frankry01", "gagneer01", "hairsje02", "hergema01", "hiattph01", "hillgl01", "hundlto01", "juddmi01", "justida01", "knoblch01", "lakerti01", "lansimi01", "loducpa01", "loganno01", "manzajo01", "mckayco01", "merckke01", "miadiba01", "morriha02", "naultda01", "neaglde01", "parquji01", "pettian01", "piattad01", "prattto02", "randost01", "riggsad01", "roberbr01", "seguida01", "santaf.01", "stantmi02", "stoneri01", "tejadmi01", "vaughmo01", "villoro01", "vinafe01", "whitero02", "willije02", "willito02", "youngke01", "zaungr01", "ankieri01", "bellda01", "byrdpa01", "gibboja01", "glaustr01", "guilljo01", "holmeda01", "matthga02", "rockejo01", "schoesc01", "valdeis01", "willima04", "woodast01")
+mitchell_report <- c("caminke01", "cansejo01", "dykstle01", "joynewa01", "mcgwima01", "turnbde01", "alexama02", "bonesri01", "cabreal02", "crawfpa02", "gonzaju03", "grimsja01", "palmera01", "benarma01", "bondsba01", "estalbo02", "giambja01", "giambje01", "riosar01", "santibe01", "sheffga01", "velarra01", "allench01", "bellmi02", "bennega01", "bigbila01", "brownke01", "carrema01", "chrisja01", "clarkho02", "clemero02", "custja01", "donnebr01", "donnech01", "francma01", "frankry01", "gagneer01", "hairsje02", "hergema01", "hiattph01", "hillgl01", "hundlto01", "juddmi01", "justida01", "knoblch01", "lakerti01", "lansimi01", "loducpa01", "loganno01", "manzajo01", "mckayco01", "merckke01", "miadiba01", "morriha02", "naultda01", "neaglde01", "parquji01", "pettian01", "piattad01", "prattto02", "randost01", "riggsad01", "roberbr01", "seguida01", "santaf.01", "stantmi02", "stoneri01", "tejadmi01", "vaughmo01", "villoro01", "vinafe01", "whitero02", "willije02", "willito02", "youngke01", "zaungr01", "ankieri01", "bellda01", "byrdpa01", "gibboja01", "glaustr01", "guilljo01", "holmeda01", "matthga02", "rockejo01", "schoesc01", "valdeis01", "willima04", "woodast01", 
+                     "alfonel01", "almanca01", "almonab01", "asheral01", "bastaan01", "beckhti01", "betanra01", "braunry02", "byrdma01", "cabreev01", "cabreme01", "camermi01", "canoro01", "castiwe01", "cervefr01", "colabch01", "colonba01", "cruzne02", "frankry01", "galvifr01", "gibboja01", "gordode01", "grandya01", "grimsja01", "guilljo01", "heredfe01", "lawtoma02", "martest01", "martefr01", "maybica01", "mckiran01", "mejiaje01", "mondera02", "montafr02", "monteag01", "morsemi01", "motagu01", "palmera01", "pattotr01", "paulida01", "peraljh01", "perezne01", "pinedmi01", "polanjo01", "ramirma02", "rincoju01", "rodrial01", "rollida01", "romerj", "ruizca01", "salasju01", "sanchal03", "santaer01", "serafda01", "stanlco01", "stronja01", "stumpda01", "tejadmi01", "volqued01", "wrighst01", "catetr01", "collawi01", "cordofr01", "guzmaje01", "henslcl01", "macharo01", "mossda01", "mallebr01", "nunnajo01", "evansto01", "matosju01", "rodriri03", "robergr01", "torreei01", "ruizra01", "mcdonda02", "rodrigu01", "herrejo03", "smythst01", "tocajo01", "parkech01", "uguetlu01", "delgawi01", "castrra01", "labanjo01", "whitema02", "ruizra01", "ramirra02", "rodrine01", "nunezab01", "haadya01", "mccutda01", "crucefr01", "urdanli01", "saloman01", "jorgery01", "hackmlu01", "schafjo02", "cotahu01", "sosajo02", "hernaru03", "owenshe02", "mitrese01", "ozunapa01", "redmapr01", "lopezpe01", "quintom01", "kinnema01", "frandke01", "valdejo02", "monteje01", "escalse01", "martife02", "delosfa01", "norbejo01", "colomal01", "vizcaar01", "guerrja01", "delabst01", "jurrjja01", "alcanvi01", "puellce01", "choiji01", "gamboed01", "colonjo01", "chavimi01", "webblo01", "gonzalu01", "riosda01", "adducji02")
 
+vets_comm <- c("haineje01", "bancrda01", "hafeych01", "youngro01", "kellyge01", "bottoji01", "lindsfr01")
 
+Master2[Master2$playerID %in% vets_comm,"vets_comm"] <- TRUE
 Master2[Master2$bbrefID.x %in% banned_players,"banned"] <- TRUE
 Master2[Master2$bbrefID.x %in% mitchell_report, "steriods"] <- TRUE
 Master2[is.na(Master2$steriods),"steriods"] <- FALSE
+Master2[is.na(Master2$vets_comm),"vets_comm"] <- FALSE
 Master2 <- Master2 %>% mutate(name = paste0(nameFirst, " ", nameLast))
 Master2 <- left_join(Master2, final_batting, by = "playerID")
 Master2 <- left_join(Master2, final_pitching, by = "playerID")
-Master2 <- Master2 %>% dplyr::select(playerID, bbrefID.x, name, bats, throws, debut, finalGame, team, position, PO, A, E, rWAR, pitchPer, batPer, firstyearID.B, lastyearID.B, rWAR_batting, AB, H.B, HR.B, BB.B, G.B, AVG, R, RBI, SB, OBP, SLG, OPS, firstyearID.P, lastyearID.P, rWAR_pitching, W, L, ERA, G.P, GS, SV, IP, SO.P, WHIP, GPost, BAPost, WSW, WSL, goldGloves, MVPs, aStarApp, firstYearHOF, lastYearHOF, ballots, onBallot, inducted, votedBy, percentVote, banned, steriods)
-colnames(Master2) <- c("playerID", "bbrefID", "name", "bats", "throws", "debut", "finalGame", "team", "position", "PO", "A", "E", "rWAR", "pitchPer", "batPer", "firstYearID.B", "lastYearID.B", "rWAR.B", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "SB", "OBP", "SLG", "OPS", "firstYearID.P", "lastYearID.P", "rWAR.P", "W", "L", "ERA", "G.P", "GS", "SV", "IP", "SO", "WHIP", "GPost", "BAPost", "WSW", "WSL", "goldGloves", "MVPs", "allStarApps", "firstYearHOF", "lastYearHOF", "ballots", "onBallot", "inducted", "votedBy", "percentVote", "banned", "steriods")
+Master2 <- Master2 %>% dplyr::select(playerID, bbrefID.x, name, bats, throws, debut, finalGame, career_len, team, wPer, position, pos_d, PO, A, E, rWAR, pitchPer, batPer, firstyearID.B, lastyearID.B, rWAR_batting, AB, H.B, HR.B, BB.B, G.B, AVG, R, RBI, SB, OBP, SLG, OPS, firstyearID.P, lastyearID.P, rWAR_pitching, W, L, ERA, G.P, GS, SV, IP, SO.P, WHIP, GPost, BAPost, WSW, WSL, goldGloves, MVPs, CYaward, BRaward, CBPoY, HAaward, hutch, LGMaward, PTC, ReloY, RCaward, RRMaward, RoY, SS, TC, aStarApp, firstYearHOF, lastYearHOF, ballots, onBallot, inducted, votedBy, percentVote, banned, steriods, vets_comm)
+colnames(Master2) <- c("playerID", "bbrefID", "name", "bats", "throws", "debut", "finalGame", "career_len", "team", "winPer", "position", "def_pos", "PO", "A", "E", "rWAR", "pitchPer", "batPer", "firstYearID.B", "lastYearID.B", "rWAR.B", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "SB", "OBP", "SLG", "OPS", "firstYearID.P", "lastYearID.P", "rWAR.P", "W", "L", "ERA", "G.P", "GS", "SV", "IP", "SO", "WHIP", "GPost", "BAPost", "WSW", "WSL", "goldGloves", "MVPs", "CYaward", "BRaward", "CBPoY", "HAaward", "hutch", "LGMaward", "PTC", "ReloY", "RCaward", "RRMaward", "RoY", "SS", "TC", "allStarApps", "firstYearHOF", "lastYearHOF", "ballots", "onBallot", "inducted", "votedBy", "percentVote", "banned", "steriods", "vets_comm")
 Master2[Master2$AB == 0 & !is.na(Master2$AB),c("BA", "OBP", "SLG", "OPS")] <- NA
 
 fwrite(Master2, "baseball.csv")
