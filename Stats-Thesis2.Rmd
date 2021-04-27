@@ -352,11 +352,11 @@ ggplot(s_batters, aes(retireRank, HR)) + geom_point(aes(color = inducted)) + the
 ```{r}
 HOF_batters <- baseball %>% filter(inducted & position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & finalGame < as.Date("2004-01-01") & finalGame > as.Date("1924-01-01"))
 
-batters <- baseball %>% filter(position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & finalGame < as.Date("2004-01-01") & finalGame > as.Date("1924-01-01"))
+batters <- baseball %>% filter(position != "P" & votedBy != "Negro League" & str_sub(playerID, -2, -1) != "99" & finalGame < as.Date("2004-01-01") & finalGame > as.Date("1924-01-01") & rWAR >= 10)
 batters$retireRank <- floor((as.numeric(format(batters$finalGame, "%Y")) - 4) / 10) - 191
 batters$FP <- (batters$PO + batters$A) / (batters$PO + batters$A + batters$E) 
 
-ggplot(batters, aes(retireRank, AB, color = inducted)) + geom_jitter() + theme_bw() + scale_color_manual(values = c("yellow", "green")) + labs(title = "Number of At-Bats by Retirement Decade", x = "Retirement Decade", y = "ABs", color = "Inducted to HOF?")
+# ggplot(batters, aes(retireRank, AB, color = inducted)) + geom_jitter() + theme_bw() + scale_color_manual(values = c("yellow", "green")) + labs(title = "Number of At-Bats by Retirement Decade", x = "Retirement Decade", y = "ABs", color = "Inducted to HOF?")
 
 
 for (i in sort(unique(batters$retireRank))) {
@@ -365,8 +365,100 @@ for (i in sort(unique(batters$retireRank))) {
   print(paste0("Decade ", i, ": min AB rank is ", sum(AB_lim), "; percentile is ", mean(!AB_lim), "; total batters is ", dim(temp)[1], "; "))
 }
 
-apply(new_batters[,c("FP", "rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "OBP", "SLG")], 2, qqPlot)
-apply(log(new_batters[,c("FP", "rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "OBP", "SLG")]), 2, qqPlot)
-library(car)
+# apply(new_batters[,c("FP", "rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "OBP", "SLG")], 2, qqPlot)
+# apply(log(new_batters[,c("FP", "rWAR", "AB", "H", "HR", "BB", "G.B", "BA", "R", "RBI", "OBP", "SLG")]), 2, qqPlot)
+# library(car)
+```
+
+```{r Rejected Models}
+# Standardize data normal
+snew2_batters <- new_batters %>% select(rWAR, AB, H, HR, BB, G.B, BA, R, RBI, SB, OBP, SLG, FP) %>% log() 
+snew2_batters <- apply(snew2_batters, 2, standardize) %>% cbind(new_batters[,c("inducted", "steriods", "retireRank")])
+
+# Standardized Model 1: WAR
+mcr10 <- NULL
+auc10 <- NULL
+for (i in 1:length(sets)) {
+  mod <- glm(data = snew2_batters[!sets[[i]],], formula = inducted ~ rWAR, family = "binomial")
+  mcr10 <- c(mcr10, mc_rate(get_prob(snew2_batters[sets[[i]],c("rWAR")], mod$coefficients), snew2_batters[sets[[i]],]$inducted))
+  auc10 <- c(auc10, roc(snew2_batters[sets[[i]],]$inducted, get_prob(snew2_batters[sets[[i]],c("rWAR")], mod$coefficients))$auc)
+}
+# print(paste0("Standardized Model 1 -- Misclassification Rate: ", round(mean(mcr3)*100, 1), "%; Area Under the Curve: ", round(mean(auc3), 3)))
+
+# Standardized Model 2: Standard Statistics
+mcr11 <- NULL
+auc11 <- NULL
+for (i in 1:length(sets)) {
+  mod <- glm(data = snew2_batters[!sets[[i]],], formula = inducted ~ G.B + AB + BB + H + HR + R + RBI + SB + FP + OBP + SLG, family = "binomial")
+  mcr11 <- c(mcr11, mc_rate(get_prob(snew2_batters[sets[[i]],c("G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG")], mod$coefficients), snew2_batters[sets[[i]],]$inducted))
+  auc11 <- c(auc11, roc(snew2_batters[sets[[i]],]$inducted, get_prob(snew2_batters[sets[[i]],c("G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG")], mod$coefficients))$auc)
+}
+# print(paste0("Standardized Model 2 -- Misclassification Rate: ", round(mean(mcr4)*100, 1), "%; Area Under the Curve: ", round(mean(auc4), 3)))
+
+# Standardized Model 3: Combined Stats
+mcr12 <- NULL
+auc12 <- NULL
+for (i in 1:length(sets)) {
+  mod <- glm(data = snew2_batters[!sets[[i]],], formula = inducted ~ rWAR + G.B + AB + BB + H + HR + R + RBI + SB + FP + OBP + SLG, family = "binomial")
+  mcr12 <- c(mcr12, mc_rate(get_prob(snew2_batters[sets[[i]],c("rWAR", "G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG")], mod$coefficients), snew2_batters[sets[[i]],]$inducted))
+  auc12 <- c(auc12, roc(snew2_batters[sets[[i]],]$inducted, get_prob(snew2_batters[sets[[i]],c("rWAR", "G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG")], mod$coefficients))$auc)
+}
+# print(paste0("Standardized Model 3 -- Misclassification Rate: ", round(mean(mcr8)*100, 1), "%; Area Under the Curve: ", round(mean(auc8), 3)))
+
+# Standardized Model 1 with Time Interactions: WAR
+mcr13 <- NULL
+auc13 <- NULL
+for (i in 1:length(sets)) {
+  mod <- glm(data = snew2_batters[!sets[[i]],], formula = inducted ~ retireRank*rWAR, family = "binomial")
+  temp <- cbind(snew2_batters[sets[[i]],c("retireRank", "rWAR")], snew2_batters[sets[[i]],]$retireRank*snew2_batters[sets[[i]],]$rWAR)
+  mcr13 <- c(mcr13, mc_rate(get_prob(temp, mod$coefficients), snew2_batters[sets[[i]],]$inducted))
+  auc13 <- c(auc13, roc(snew2_batters[sets[[i]],]$inducted, get_prob(temp, mod$coefficients))$auc)
+}
+# print(paste0("Standardized Model 1 with Time Interactions -- Misclassification Rate: ", round(mean(mcr5)*100, 1), "%; Area Under the Curve: ", round(mean(auc5), 3)))
+
+# Standardized Model 2 with Time Interactions: Standard Statistics
+mcr14 <- NULL
+auc14 <- NULL
+for (i in 1:length(sets)) {
+  mod <- glm(data = snew2_batters[!sets[[i]],], formula = inducted ~ retireRank*G.B + retireRank*AB + retireRank*BB + retireRank*H + retireRank*HR + retireRank*R + retireRank*RBI + retireRank*SB + retireRank*FP + retireRank*OBP + retireRank*SLG, family = "binomial")
+  temp <- cbind(snew2_batters[sets[[i]],c("retireRank", "G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG")], snew2_batters[sets[[i]],c("G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG")]*snew2_batters[sets[[i]],]$retireRank)
+  mcr14 <- c(mcr14, mc_rate(get_prob(temp, mod$coefficients), snew2_batters[sets[[i]],]$inducted))
+  auc14 <- c(auc14, roc(snew2_batters[sets[[i]],]$inducted, get_prob(temp, mod$coefficients))$auc)
+}
+# print(paste0("Standardized Model 2 with Time Interactions -- Misclassification Rate: ", round(mean(mcr6)*100, 1), "%; Area Under the Curve: ", round(mean(auc6), 3)))
+
+# Standardized Model 3 with Time Interactions: Combined Stats
+mcr15 <- NULL
+auc15 <- NULL
+for (i in 1:length(sets)) {
+  mod <- glm(data = snew2_batters[!sets[[i]],], formula = inducted ~ retireRank*rWAR + retireRank*G.B + retireRank*AB + retireRank*BB + retireRank*H + retireRank*HR + retireRank*R + retireRank*RBI + retireRank*SB + retireRank*FP + retireRank*OBP + retireRank*SLG, family = "binomial")
+  temp <- cbind(snew2_batters[sets[[i]],c("retireRank", "rWAR", "G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG")], snew2_batters[sets[[i]],c("rWAR", "G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG")]*snew2_batters[sets[[i]],]$retireRank)
+  mcr15 <- c(mcr15, mc_rate(get_prob(temp, mod$coefficients), snew2_batters[sets[[i]],]$inducted))
+  auc15 <- c(auc15, roc(snew2_batters[sets[[i]],]$inducted, get_prob(temp, mod$coefficients))$auc)
+}
+# print(paste0("Standardized Model 3 with Time Interactions -- Misclassification Rate: ", round(mean(mcr9)*100, 1), "%; Area Under the Curve: ", round(mean(auc9), 3)))
+```
+
+```{r Random Forest}
+library(randomForest)
+# Model 1: WAR 
+mcr1 <- NULL
+auc1 <- NULL
+for (i in 1:length(sets)) {
+  mod <- randomForest(factor(inducted) ~ rWAR + retireRank, data = new_batters[!sets[[i]],])
+  mcr1 <- c(mcr1, mc_rate(predict(mod, new_batters[sets[[i]],c("rWAR", "retireRank")], type = "prob")[,2], new_batters[sets[[i]],]$inducted))
+  auc1 <- c(auc1, roc(new_batters[sets[[i]],]$inducted, predict(mod, new_batters[sets[[i]],c("rWAR", "retireRank")], type = "prob")[,1])$auc)
+}
+print(paste0("Random Forest 1 -- Misclassification Rate: ", round(mean(mcr1)*100, 1), "%; Area Under the Curve: ", round(mean(auc1), 3)))
+
+# Model 2: Standard Statistics
+mcr2 <- NULL
+auc2 <- NULL
+for (i in 1:length(sets)) {
+  mod <- randomForest(factor(inducted) ~ retireRank + G.B + AB + BB + H + HR + R + RBI + SB + FP + OBP + SLG + BA, data = new_batters[!sets[[i]],])
+  mcr2 <- c(mcr2, mc_rate(predict(mod, new_batters[sets[[i]],c("retireRank", "G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG", "BA")], type = "prob")[,2], new_batters[sets[[i]],]$inducted))
+  auc2 <- c(auc2, roc(new_batters[sets[[i]],]$inducted, predict(mod, new_batters[sets[[i]],c("retireRank", "G.B", "AB", "BB", "H", "HR", "R", "RBI", "SB", "FP", "OBP", "SLG", "BA")], type = "prob")[,1])$auc)
+}
+print(paste0("Random Forest 2 -- Misclassification Rate: ", round(mean(mcr2)*100, 1), "%; Area Under the Curve: ", round(mean(auc2), 3)))
 ```
 
